@@ -2,6 +2,7 @@ package dev.omalauncher.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.ViewTreeObserver
 import android.widget.Toast
@@ -32,7 +33,11 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import dev.omalauncher.App
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -68,6 +73,8 @@ val ExtraKeysHeight = KeyRowHeight * 2 + (FrameWidth + KeyGap) * 2 + Gap
 private sealed interface ExtraKey
 
 private data object Dictation : ExtraKey
+
+private data object Screenshot : ExtraKey
 
 /** A key that sends [code], with [held] down around it; drawn as [label], or as a chevron turned [arrow] degrees from up. */
 private data class Plain(
@@ -106,6 +113,7 @@ private val Layout: List<List<ExtraKey>> =
             Plain("right", Keys.KEY_RIGHT, repeats = true, arrow = 90f),
             Plain("pgdn", Keys.KEY_PAGEDOWN, repeats = true),
             Plain("paste", Keys.KEY_INSERT, held = Keys.KEY_LEFTSHIFT),
+            Screenshot,
         ),
     )
 
@@ -150,10 +158,87 @@ fun ExtraKeys(
                         is Plain -> PlainKey(key, bridge, cap)
                         is Sticky -> StickyKey(key, key.modifier(bridge), cap)
                         Dictation -> DictationKey(bridge, cap)
+                        Screenshot -> ScreenshotKey(bridge, cap)
                     }
                 }
             }
         }
+    }
+}
+
+/** Separate from Paste: imports the latest screenshot without changing the user's clipboard. */
+@Composable
+private fun ScreenshotKey(bridge: KeyboardBridge, modifier: Modifier) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var target by remember { mutableStateOf<dev.omalauncher.wayland.XdgToplevel?>(null) }
+    val imagePermission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+
+    fun attach() {
+        val destination = target ?: return
+        scope.launch {
+            busy = true
+            try {
+                val runtime = (context.applicationContext as App).runtime
+                val path = withContext(Dispatchers.IO) {
+                    Screenshots.latest(context, runtime.proot.hostFile(Screenshots.GUEST_DIR))
+                }
+                if (view.hasWindowFocus() && bridge.dictationTarget === destination) {
+                    bridge.attachImage(path, destination)
+                } else {
+                    Toast.makeText(context, "Window changed; tap the image button again", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Toast.makeText(context, e.message ?: "Could not attach screenshot", Toast.LENGTH_LONG).show()
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        busy = false
+        val limited = Build.VERSION.SDK_INT >= 34 && grants[Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED] == true
+        if (grants[imagePermission] == true || limited) {
+            // The permission dialog can hide the IME and dispose this bar. A fresh tap
+            // captures the current destination instead of using a stale coroutine/window.
+            val message = if (limited && grants[imagePermission] != true) {
+                "Access granted to selected photos. Reopen the keyboard and tap the image button."
+            } else {
+                "Photo access granted. Reopen the keyboard and tap the image button."
+            }
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(context, "Photo access is needed to find your latest screenshot", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    KeyCap(
+        modifier
+            .semantics { contentDescription = "Attach latest screenshot" }
+            .clickable(enabled = !busy) {
+                target = bridge.dictationTarget
+                if (target != null) {
+                    val canReadSelected = Build.VERSION.SDK_INT >= 34 &&
+                        context.checkSelfPermission(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED
+                    if (context.checkSelfPermission(imagePermission) == PackageManager.PERMISSION_GRANTED || canReadSelected) {
+                        attach()
+                    } else {
+                        busy = true
+                        permission.launch(
+                            if (Build.VERSION.SDK_INT >= 34) arrayOf(imagePermission, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+                            else arrayOf(imagePermission),
+                        )
+                    }
+                }
+            },
+        fill = if (busy) Palette.accent else Palette.surface,
+    ) {
+        Image(Icons.Image, null, Modifier.size(20.dp), colorFilter = ColorFilter.tint(if (busy) Palette.background else Palette.foreground))
     }
 }
 

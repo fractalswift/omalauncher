@@ -53,6 +53,16 @@ tap again to finish and insert the transcript without pressing Enter. It uses
 Android speech recognition, preferring on-device recognition when available.
 Leaving the window cancels dictation.
 
+The image button below the microphone attaches the **latest Android screenshot**
+to a local agent prompt. Grant photo access on first use, then reopen the keyboard
+and tap the image button again. With limited photo access, it uses the latest
+screenshot among the photos you allowed. It imports the original image into
+`~/.local/share/omalauncher/attachments` and pastes its local path; OpenCode 2
+converts that paste into an `[Image 1]` attachment. It does not press Enter.
+The separate **paste** key still pastes your clipboard, which the image button
+does not replace. This has been verified with local OpenCode 2 in foot; an agent
+running over SSH needs the image transferred to that remote machine first.
+
 ## Building
 
 ```sh
