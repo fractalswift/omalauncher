@@ -94,6 +94,10 @@ class KeyboardBridge(
         code: Int,
         held: Int? = null,
     ) = withLatched {
+        if (code == Keys.KEY_INSERT && held == Keys.KEY_LEFTSHIFT) {
+            // Discard any unconsumed targeted attachment offer before an ordinary Paste.
+            wm.server.postInput { wm.server.selection.offerToFocus() }
+        }
         held?.let { key(it, true) }
         key(code, true)
         key(code, false)
@@ -111,6 +115,20 @@ class KeyboardBridge(
         clearLatches()
         // Recognition inserts prose only: never synthesize an Enter from a transcript.
         type(text.replace('\n', ' ').replace('\r', ' '))
+    }
+
+    /** Let foot deliver a bracketed paste, so agents recognise a local image attachment. */
+    internal fun attachImage(path: String, target: dev.omalauncher.wayland.XdgToplevel) {
+        if (wm.focused !== target) return
+        clearLatches()
+        wm.server.postInput {
+            if (keyboardFocus !== target.surface) return@postInput
+            wm.server.selection.offer(target.client, pasteText = path)
+            key(Keys.KEY_LEFTSHIFT, true)
+            key(Keys.KEY_INSERT, true)
+            key(Keys.KEY_INSERT, false)
+            key(Keys.KEY_LEFTSHIFT, false)
+        }
     }
 
     private fun latched() = sticky.any { it.latch != Latch.Off }

@@ -83,7 +83,8 @@ class Selection(
         server.input.keyboardFocus?.let { offer(it.client) }
     }
 
-    fun offer(client: Client) {
+    /** [pasteText] overrides this offer only; the underlying selection is preserved. */
+    fun offer(client: Client, pasteText: String? = null) {
         val devices = client.all(DataDevice::class.java)
         if (devices.isEmpty()) return
         val src = source
@@ -91,6 +92,7 @@ class Selection(
         // here (Android hides it from a window that's just getting focus), so a paste finds out.
         val mimes =
             when {
+                pasteText != null -> TEXT_MIMES
                 src != null -> src.mimes.toList()
                 system != null -> TEXT_MIMES
                 else -> null
@@ -100,7 +102,7 @@ class Selection(
                 d.send(d.event(5).obj(0))
                 continue
             }
-            val offer = client.register(DataOffer(client, client.newServerId(), d.version, src, this))
+            val offer = client.register(DataOffer(client, client.newServerId(), d.version, src, this, pasteText))
             d.send(d.event(0).int(offer.id))
             for (m in mimes) offer.send(offer.event(0).string(m))
             d.send(d.event(5).obj(offer.id))
@@ -130,12 +132,12 @@ class Selection(
         }
     }
 
-    /** Writes Android's clipboard text to [fd] for a paste, then closes it. */
-    fun paste(fd: Int) {
+    /** Writes [text], or Android's clipboard text, to [fd] and closes it. */
+    fun paste(fd: Int, text: String? = null) {
         val system = system
         thread(name = "wl-clip-write", isDaemon = true) {
             ParcelFileDescriptor.AutoCloseOutputStream(ParcelFileDescriptor.adoptFd(fd)).use { out ->
-                val text = runCatching { system?.text() }.getOrNull() ?: return@thread
+                val text = text ?: runCatching { system?.text() }.getOrNull() ?: return@thread
                 // The client may stop reading early (EPIPE): nothing to do about it.
                 runCatching { out.write(text.toByteArray()) }
             }
@@ -246,6 +248,8 @@ class DataOffer(
     version: Int,
     private val source: DataSource?,
     private val selection: Selection,
+    /** A single targeted paste, without replacing either Android's or Linux's clipboard. */
+    private val pasteText: String? = null,
 ) : Resource(client, id, version) {
     override val iface = "wl_data_offer"
 
@@ -259,6 +263,10 @@ class DataOffer(
                 val fd = args.fd()
                 if (fd < 0) return
                 when {
+                    pasteText != null -> {
+                        selection.paste(fd, pasteText)
+                        selection.offer(client)
+                    }
                     source == null -> selection.paste(fd)
                     source.cancelled -> Native.close(fd)
                     else -> source.send(source.event(1).string(mime).fd(fd, close = true))
