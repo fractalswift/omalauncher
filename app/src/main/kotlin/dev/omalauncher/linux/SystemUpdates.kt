@@ -149,7 +149,9 @@ class SystemUpdates(
             pacman.lock.withLock {
                 withContext(Dispatchers.IO) {
                     job = JobState.Working("updating", emptyList())
-                    val (ok, tail) = proot.runJob(UPDATE_SCRIPT) { job = JobState.Working("updating", it) }
+                    val (ok, tail) = proot.runJob(updateScript(agents.installed.any { it.bin == "opencode" })) {
+                        job = JobState.Working("updating", it)
+                    }
                     job = if (ok) JobState.Idle else JobState.Failed(tail.toList())
                     ok
                 }
@@ -185,8 +187,10 @@ class SystemUpdates(
             """.trimIndent()
 
         /** Databases refreshed (-Syy) even if pacman thinks they're current: mirrors lag each other. */
-        val UPDATE_SCRIPT =
+        fun updateScript(openCodeInstalled: Boolean) =
             "pacman -Syyu --noconfirm && $CLEAN_PACMAN_CACHE && " +
-                "if command -v mise >/dev/null; then mise upgrade && mise prune -y && mise cache clear; fi"
+                "if command -v mise >/dev/null; then " +
+                (if (openCodeInstalled) "$PREPARE_OPENCODE && " else "") +
+                "mise upgrade && mise prune -y && mise cache clear; fi"
     }
 }

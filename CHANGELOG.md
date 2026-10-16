@@ -4,6 +4,11 @@ The most important changes in each release. The Play Store notes for a release
 are in `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`.
 Dates are when the build was uploaded to Play.
 
+## Unreleased (fork)
+
+- OpenCode installs and system updates prepare Node.js for OpenCode 2's npm-based
+  installer, and update mise first when its registry is too old for V2.
+
 ## 0.7.2 (versionCode 14) – 2026-10-14
 
 - Text files open in the launcher's own touch-first editor, in the Omarchy theme,

@@ -51,6 +51,16 @@ val AGENTS =
         Agent("kimi", "Kimi", "Moonshot AI's coding agent", "npm:@moonshot-ai/kimi-code"),
     )
 
+/** V2's mise registry entry uses npm instead of the old aqua release downloads. */
+internal val PREPARE_OPENCODE =
+    """
+    mise_version=${'$'}(mise --version | cut -d ' ' -f 1) &&
+    if [ "${'$'}(printf '%s\n' 2026.10.9 "${'$'}mise_version" | sort -V | head -n 1)" != 2026.10.9 ]; then
+      mise self-update --yes
+    fi &&
+    mise use -g node@lts
+    """.trimIndent()
+
 /**
  * Starts [agentBin] with a first prompt; OpenCode takes it as --prompt, the others as an argument.
  * Ori's agent is `ori code`, which stays open only with --interactive. Kimi takes a prompt only in
@@ -123,7 +133,11 @@ class AgentStore(
     fun installScript(agent: Agent) =
         buildString {
             if (!mise.exists()) append("curl -fsSL https://mise.run | sh && ")
-            if (agent.pkg.startsWith("npm:")) append("mise use -g node@lts && ")
+            if (agent.bin == "opencode") {
+                append("$PREPARE_OPENCODE && ")
+            } else if (agent.pkg.startsWith("npm:")) {
+                append("mise use -g node@lts && ")
+            }
             append("mise use -g ${shellQuote(agent.pkg)}")
             // Downloads are only needed during install; storage on phones is tight.
             append(" && mise cache clear && rm -rf ~/.local/share/mise/downloads")
