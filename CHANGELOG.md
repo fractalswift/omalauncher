@@ -6,6 +6,8 @@ Dates are when the build was uploaded to Play.
 
 ## Unreleased (fork)
 
+- Dictation selects installed on-device language models, gives the recognizer
+  time to reconnect on fallback, and retries one startup client/disconnection error.
 - A separate image button in the terminal helper panel attaches the latest
   Android screenshot to local OpenCode 2 prompts, preserving the text clipboard.
 - OpenCode installs and system updates prepare Node.js for OpenCode 2's npm-based

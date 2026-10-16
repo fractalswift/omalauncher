@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognitionSupport
 import android.speech.RecognitionSupportCallback
@@ -43,6 +45,9 @@ class Speech(
     private var onDevice = true
     private var finished = ""
     private var onDone: ((String) -> Unit)? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var pendingRetry: Runnable? = null
+    private var canRetryStartup = false
 
     /** While held, pauses don't end recognition: a new segment starts until [stop]. */
     private var held = false
@@ -66,6 +71,7 @@ class Speech(
             return
         }
         held = hold
+        canRetryStartup = true
         this.onDone = onDone
         finished = ""
         text = ""
@@ -76,6 +82,11 @@ class Speech(
     /** Ends recognition now; the text so far goes to onDone. */
     fun stop() {
         held = false
+        if (pendingRetry != null) {
+            clearRetry()
+            finish()
+            return
+        }
         recognizer?.stopListening() ?: finish()
     }
 
@@ -86,6 +97,7 @@ class Speech(
 
     /** Ends recognition without calling onDone. */
     fun cancel() {
+        clearRetry()
         held = false
         onDone = null
         recognizer?.destroy()
@@ -103,8 +115,9 @@ class Speech(
 
     private fun listen() {
         recognizer?.destroy()
+        onDevice = onDevice && onDeviceAvailable
         val r =
-            if (onDevice && onDeviceAvailable) {
+            if (onDevice) {
                 SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
             } else {
                 SpeechRecognizer.createSpeechRecognizer(context)
@@ -119,6 +132,10 @@ class Speech(
                 override fun onSupportResult(support: RecognitionSupport) {
                     if (r !== recognizer) return
                     language = closestLanguage(support)
+                    if (onDevice && language == null) {
+                        useRegularRecognizer(r)
+                        return
+                    }
                     Log.i(TAG, "recognizing ${language ?: "the default language"}")
                     r.startListening(intent())
                 }
@@ -145,31 +162,18 @@ class Speech(
      */
     @androidx.annotation.RequiresApi(33)
     private fun closestLanguage(support: RecognitionSupport): String? {
-        val locale = Locale.getDefault()
-        val wanted = Locale(locale.language, locale.country).toLanguageTag()
         val pools =
             if (onDevice) {
-                listOf(support.installedOnDeviceLanguages, support.supportedOnDeviceLanguages, support.onlineLanguages)
+                // Supported languages may need a download; only installed models can work now.
+                listOf(support.installedOnDeviceLanguages)
             } else {
-                listOf(support.onlineLanguages, support.installedOnDeviceLanguages, support.supportedOnDeviceLanguages)
+                listOf(support.onlineLanguages, support.installedOnDeviceLanguages)
             }
-        pools.flatten().firstOrNull { it.equals(wanted, ignoreCase = true) }?.let { return it }
-        val home = "${locale.language}-${locale.language}"
-        for (pool in pools) {
-            val same = pool.filter { it.substringBefore('-').equals(locale.language, ignoreCase = true) }
-            same
-                .minByOrNull {
-                    when {
-                        it.equals(home, ignoreCase = true) -> 0
-                        it.endsWith("-US", ignoreCase = true) -> 1
-                        else -> 2
-                    }
-                }?.let { return it }
-        }
-        return null
+        return speechLanguage(Locale.getDefault(), pools)
     }
 
     private fun finish() {
+        clearRetry()
         recognizer?.destroy()
         recognizer = null
         listening = false
@@ -177,6 +181,38 @@ class Speech(
         val done = onDone
         onDone = null
         done?.invoke(text.trim())
+    }
+
+    private fun clearRetry() {
+        pendingRetry?.let(handler::removeCallbacks)
+        pendingRetry = null
+    }
+
+    /** Some recognition services disconnect on a cold start, then succeed on reconnect. */
+    private fun retryStartup(r: SpeechRecognizer) {
+        canRetryStartup = false
+        Log.i(TAG, "speech service failed at startup; retrying once")
+        reconnect(r)
+    }
+
+    private fun useRegularRecognizer(r: SpeechRecognizer) {
+        Log.i(TAG, "no installed on-device model for this language, using the regular recognizer")
+        onDevice = false
+        language = null
+        reconnect(r)
+    }
+
+    /** Give the old service time to release its connection before binding a replacement. */
+    private fun reconnect(r: SpeechRecognizer) {
+        // Ignore any late callbacks from this service before destroying its connection.
+        recognizer = null
+        r.destroy()
+        val retry = Runnable {
+            pendingRetry = null
+            if (listening) listen()
+        }
+        pendingRetry = retry
+        handler.postDelayed(retry, 300L)
     }
 
     private fun join(
@@ -206,15 +242,13 @@ class Speech(
         override fun onError(code: Int) {
             if (!current) return
             when (code) {
+                SpeechRecognizer.ERROR_CLIENT, SpeechRecognizer.ERROR_SERVER_DISCONNECTED ->
+                    if (canRetryStartup && text.isBlank()) retryStartup(r) else fail("speech recognition failed ($code)")
                 // Silence or nothing understood: fine while the button is held.
                 SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> if (held) listen() else finish()
                 SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE ->
                     if (onDevice) {
-                        Log.i(TAG, "no on-device model for this language, using the regular recognizer")
-                        onDevice = false
-                        // The regular recognizer may know other languages than the on-device one.
-                        language = null
-                        listen()
+                        useRegularRecognizer(r)
                     } else {
                         fail("speech isn't available in this language")
                     }
@@ -252,4 +286,22 @@ class Speech(
     companion object {
         private const val TAG = "speech"
     }
+}
+
+/** Prefer an exact locale within each model pool before trying a different region. */
+internal fun speechLanguage(locale: Locale, pools: List<List<String>>): String? {
+    val wanted = locale.toLanguageTag()
+    val home = "${locale.language}-${locale.language}"
+    for (pool in pools) {
+        pool.firstOrNull { it.equals(wanted, ignoreCase = true) }?.let { return it }
+        pool.filter { it.substringBefore('-').equals(locale.language, ignoreCase = true) }
+            .minByOrNull {
+                when {
+                    it.equals(home, ignoreCase = true) -> 0
+                    it.endsWith("-US", ignoreCase = true) -> 1
+                    else -> 2
+                }
+            }?.let { return it }
+    }
+    return null
 }
