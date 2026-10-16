@@ -20,7 +20,8 @@ PROOT=5.1.107.96
 TALLOC=2.5.0
 SHMEM=0.7
 # The NDK Termux builds proot with (its clang version string), and one GitHub's Ubuntu runners have.
-NDK_VERSION=30.0.16248370
+# Local builds may override NDK_VERSION to use an installed NDK.
+NDK_VERSION=${NDK_VERSION:-30.0.16248370}
 
 fetch() {
   local pkg=$1 file=$2 sha=$3

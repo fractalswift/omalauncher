@@ -19,6 +19,7 @@ android {
         targetSdk = 37
         versionCode = 14
         versionName = "0.7.2"
+        manifestPlaceholders["appLabel"] = "Omalauncher"
         ndk { abiFilters += "arm64-v8a" }
     }
 
@@ -51,6 +52,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appLabel"] = "Omalauncher Dev"
+        }
         release {
             // Shrinks the APK and drops what the app doesn't use, like the owl module's unused parts.
             isMinifyEnabled = true

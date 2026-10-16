@@ -103,6 +103,16 @@ class KeyboardBridge(
     /** Drops every latch, so a modifier left on doesn't surprise the next keystroke. */
     fun clearLatches() = sticky.forEach { it.latch = Latch.Off }
 
+    /** Captured before recording, so a late transcript never types into another window. */
+    internal val dictationTarget get() = wm.focused
+
+    internal fun dictate(text: String, target: dev.omalauncher.wayland.XdgToplevel) {
+        if (wm.focused !== target) return
+        clearLatches()
+        // Recognition inserts prose only: never synthesize an Enter from a transcript.
+        type(text.replace('\n', ' ').replace('\r', ' '))
+    }
+
     private fun latched() = sticky.any { it.latch != Latch.Off }
 
     private inline fun withLatched(block: () -> Unit) {
