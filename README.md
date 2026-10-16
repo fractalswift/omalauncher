@@ -48,20 +48,26 @@ Hardware keyboard shortcuts: Super+Enter (terminal), Super+Space or
 Super+A (the bar), Super+1..9 (home pages) on the home screen; Super+Enter
 and Super+W (close) in Linux windows.
 
+The terminal's helper-key panel has a microphone button: tap to dictate, then
+tap again to finish and insert the transcript without pressing Enter. It uses
+Android speech recognition, preferring on-device recognition when available.
+Leaving the window cancels dictation.
+
 ## Building
 
 ```sh
 ./scripts/fetch-proot.sh          # Termux's proot -> app/src/main/jniLibs (needs bsdtar)
 ./gradlew :app:installDebug
 # optional: skip the 830 MB download on the device
-adb push ArchLinuxARM-aarch64-latest.tar.gz /sdcard/Android/data/dev.omalauncher/files/
+adb push ArchLinuxARM-aarch64-latest.tar.gz /sdcard/Android/data/dev.omalauncher.dev/files/
 ```
 
 Tests: `./gradlew :owl:test :app:testDebugUnitTest`. `./gradlew :owl:owlJar`
 builds `owl/build/cli/owl.jar`, the checker the widget store's CI runs.
 
-In debug builds you can launch guest commands with
-`adb shell am start -n dev.omalauncher/.MainActivity --es exec foot`.
+Debug builds install as **Omalauncher Dev** (`dev.omalauncher.dev`), alongside
+the release app, with separate data and Linux setup. You can launch guest commands with
+`adb shell am start -n dev.omalauncher.dev/dev.omalauncher.MainActivity --es exec foot`.
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the compositor, rendering, GPU
   acceleration, and how updates reach existing installs

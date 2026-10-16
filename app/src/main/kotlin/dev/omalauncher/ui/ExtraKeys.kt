@@ -1,6 +1,13 @@
 package dev.omalauncher.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.view.HapticFeedbackConstants
+import android.view.ViewTreeObserver
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,6 +26,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,7 +43,10 @@ import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.omalauncher.wayland.Keys
 import kotlinx.coroutines.CoroutineScope
@@ -54,6 +66,8 @@ private val Gap = 6.dp
 val ExtraKeysHeight = KeyRowHeight * 2 + (FrameWidth + KeyGap) * 2 + Gap
 
 private sealed interface ExtraKey
+
+private data object Dictation : ExtraKey
 
 /** A key that sends [code], with [held] down around it; drawn as [label], or as a chevron turned [arrow] degrees from up. */
 private data class Plain(
@@ -81,6 +95,7 @@ private val Layout: List<List<ExtraKey>> =
             Plain("pgup", Keys.KEY_PAGEUP, repeats = true),
             // Ctrl+Insert and Shift+Insert: the clipboard keys foot, GTK and Qt all know.
             Plain("copy", Keys.KEY_INSERT, held = Keys.KEY_LEFTCTRL),
+            Dictation,
         ),
         listOf(
             Plain("tab", Keys.KEY_TAB),
@@ -134,10 +149,74 @@ fun ExtraKeys(
                     when (key) {
                         is Plain -> PlainKey(key, bridge, cap)
                         is Sticky -> StickyKey(key, key.modifier(bridge), cap)
+                        Dictation -> DictationKey(bridge, cap)
                     }
                 }
             }
         }
+    }
+}
+
+/** Android records speech; only the completed transcript crosses into Linux. */
+@Composable
+private fun DictationKey(bridge: KeyboardBridge, modifier: Modifier) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val speech = remember { Speech(context.applicationContext) }
+    var target by remember { mutableStateOf<dev.omalauncher.wayland.XdgToplevel?>(null) }
+
+    fun start() {
+        val destination = target ?: return
+        if (bridge.dictationTarget !== destination) return
+        speech.start(hold = true) { text ->
+            if (text.isNotBlank()) bridge.dictate(text, destination)
+        }
+    }
+
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) start()
+        else Toast.makeText(context, "Microphone permission needed for dictation", Toast.LENGTH_SHORT).show()
+    }
+
+    LaunchedEffect(bridge.dictationTarget) {
+        if (bridge.dictationTarget !== target) speech.cancel()
+    }
+    LaunchedEffect(speech.error) {
+        speech.error?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            speech.error = null
+        }
+    }
+    DisposableEffect(speech, view) {
+        val observer = view.viewTreeObserver
+        val listener = ViewTreeObserver.OnWindowFocusChangeListener { focused ->
+            if (!focused) speech.cancel()
+        }
+        observer.addOnWindowFocusChangeListener(listener)
+        onDispose {
+            if (observer.isAlive) observer.removeOnWindowFocusChangeListener(listener)
+            speech.cancel()
+        }
+    }
+
+    KeyCap(
+        modifier
+            .semantics { contentDescription = if (speech.listening) "Stop dictation" else "Start dictation" }
+            .clickable {
+                if (speech.listening) {
+                    speech.stop()
+                } else {
+                    target = bridge.dictationTarget
+                    if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                        start()
+                    } else {
+                        permission.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                }
+            },
+        fill = if (speech.listening) Palette.accent else Palette.surface,
+    ) {
+        MicIcon(if (speech.listening) Palette.background else Palette.foreground)
     }
 }
 
