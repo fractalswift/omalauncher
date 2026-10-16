@@ -276,6 +276,14 @@ class WidgetEngine(
             File(dir, name).writeBytes(context.assets.open("widgets/$TERMINAL_ASSET").use { it.readBytes() })
         }
 
+    suspend fun addSessionsWidget(page: Int) = withContext(Dispatchers.IO) {
+        val name = "machines-sessions.owl"
+        if (!File(dir, name).exists()) {
+            setPage(name, page)
+            File(dir, name).writeBytes(context.assets.open("widgets/examples/84-sessions.owl").use { it.readBytes() })
+        }
+    }
+
     /** What a widget from a share link is saved as is there already, with the same text (null when it isn't there). */
     fun sharedWidgetIsSame(shared: Shared): Boolean? = File(dir, shared.fileName).takeIf { it.exists() }?.let { it.readText() == shared.text }
 

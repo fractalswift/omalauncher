@@ -152,6 +152,7 @@ class WidgetServices(
             "alarm" -> alarm.value()
             "modes" -> modes.value()
             "apps" -> apps()
+            "sessions" -> sessionSummary()
             else -> throw WidgetError("unknown android source $name")
         }
 
@@ -182,6 +183,15 @@ class WidgetServices(
         }
 
     override fun androidImage(src: String) = media.art(src)
+
+    private fun sessionSummary(): Value {
+        val manager = runtime.sessions
+        val items = manager.sessions.sortedByDescending { it.lastUsed }.take(3).map { session ->
+            Obj(mapOf("id" to Str(session.id), "name" to Str(session.name),
+                "machine" to Str(manager.machine(session.machineId)?.name.orEmpty()), "status" to Str(manager.label(session))))
+        }
+        return Obj(mapOf("count" to Num(manager.sessions.size.toDouble()), "items" to Lst(items)))
+    }
 
     /** "work" or "clone" for an app in a profile beside the launcher's own, as the drawer marks it; null for its own. */
     private fun profileKind(user: UserHandle): String? {

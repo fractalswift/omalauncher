@@ -6,6 +6,9 @@ Dates are when the build was uploaded to Play.
 
 ## Unreleased (fork)
 
+- Machines & Sessions manages local and SSH foot windows with stable identities,
+  optional tmux persistence, explicit resume/new/end actions, a recent-sessions
+  widget, and cached Tailscale API discovery using an Android-encrypted token.
 - Dictation selects installed on-device language models, gives the recognizer
   time to reconnect on fallback, and retries one startup client/disconnection error.
 - A separate image button in the terminal helper panel attaches the latest

@@ -1,0 +1,33 @@
+widget "machines & sessions" {
+  page: 1
+  size: 6x4
+  minSize: 3x3
+
+  source sessions = android.sessions every 5s
+
+  Column {
+    gap: 6
+    fill: true
+    Row {
+      Text { text: "machines & sessions"; style: muted; weight: 1 }
+      Button { text: "+"; onTap: launcher("sessions") }
+    }
+    Column {
+      gap: 6
+      weight: 1
+      scroll: true
+      if sessions.count == 0 {
+        Text { text: "This phone + your SSH machines"; style: small }
+      }
+      for item in sessions.items key item.id {
+        Column {
+          gap: 0
+          onTap: launcher("session:${item.id}")
+          Text { text: item.name; bold: true; maxLines: 1 }
+          Text { text: "${item.machine} · ${item.status}"; style: small; maxLines: 1 }
+        }
+      }
+    }
+    Button { text: "machines / new session"; onTap: launcher("sessions") }
+  }
+}

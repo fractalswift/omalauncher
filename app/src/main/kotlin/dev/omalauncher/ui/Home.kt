@@ -96,7 +96,9 @@ fun HomeScreen(
                 "agents" -> state.show(SettingsPage.Agents)
                 "store" -> state.show(SettingsPage.Store)
                 "linux" -> state.show(SettingsPage.Linux)
+                "sessions" -> state.show(SettingsPage.Sessions)
                 "drawer" -> state.open()
+                else -> if (action.startsWith("session:")) runtime.sessions.open(action.removePrefix("session:"))
             }
         }
     }
@@ -381,4 +383,3 @@ fun HomeScreen(
 
     }
 }
-
