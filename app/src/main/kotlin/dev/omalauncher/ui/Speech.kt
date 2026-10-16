@@ -117,7 +117,7 @@ class Speech(
         recognizer?.destroy()
         onDevice = onDevice && onDeviceAvailable
         val r =
-            if (onDevice) {
+            if (onDevice && Build.VERSION.SDK_INT >= 31) {
                 SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
             } else {
                 SpeechRecognizer.createSpeechRecognizer(context)
