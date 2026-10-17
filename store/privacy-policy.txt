@@ -1,6 +1,6 @@
 Privacy Policy
 
-Effective Date: 15.10.2026
+Effective Date: 17.10.2026
 
 Omalauncher ("the App") is an Android home screen launcher developed by Simon Schubert ("we," "us," or "our"). This Privacy Policy explains how the App handles information.
 
@@ -19,10 +19,10 @@ Your home screen layout, widgets, theme settings and, if you install it, the Lin
 
 3. Device Permissions
 
-- Microphone (optional): used only while you hold or tap the microphone button to dictate a prompt. Speech is recognized by your phone's speech recognition service (on the device where the phone supports it), and only the resulting text is passed to the app you are talking to. The App does not record or store audio.
+- Microphone (optional): used only when you hold or tap a microphone button. With Android speech selected, recognition uses the phone's recognition service. With Groq selected, the App temporarily records audio in its private cache and sends it directly to Groq for transcription with your API key. Successful transcription or cancellation deletes the recording; a failed upload can be retried while the same window remains active, and leaving it discards the recording. Only resulting text is inserted into Linux or an SSH terminal. Optional offline recognition uses only an existing on-device recognizer/model; the App does not download speech models.
 - Notification access (optional): lets media widgets show and control what is currently playing, and lets widgets you add show your notifications (app name, title and text) and open or dismiss them. Notifications are read on your device, only when a widget on your home screen asks for them, and are not stored or sent to us. A widget you add could send what it shows to a service it contacts; each widget's page in the widget store shows what it runs and which addresses it contacts.
 - Uninstalling apps: used only when you choose to uninstall an app from the app drawer. Android asks you to confirm every uninstall.
-- Internet: used to download the content listed in section 4.
+- Internet: used for the content and optional transcription services listed in section 4.
 
 4. Third-Party Services
 
@@ -39,6 +39,10 @@ dpaste.com (sharing widgets)
 wttr.in (weather widget)
 - The weather widget requests the current weather. wttr.in estimates your approximate location from your IP address.
 
+Groq (api.groq.com, optional dictation)
+- Only when you select Groq in Microphone settings and dictate, a recording is uploaded for transcription. Groq processes it under its own terms and privacy policy. Your API key is encrypted with Android Keystore in app-private storage and is sent only to Groq for these requests; it can be removed in Microphone settings.
+- Privacy Policy: https://groq.com/privacy-policy/
+
 Widgets
 - Widgets you add from the widget store may contact other services to show their content (for example prices, news feeds or radio streams). Each widget's page in the store shows what it runs and which addresses it contacts.
 - Widgets you add can see which apps are installed on your phone (their names, package names and icons) and how often you open them from the App. This list is read on your device, only when a widget on your home screen asks for it, and is not stored or sent to us. A widget could send what it reads to a service it contacts; each widget's page in the store says if it reads your apps.
@@ -49,7 +53,7 @@ Optional Linux environment
 Optional coding agents
 - Only if you choose to install a coding agent (for example Claude Code, Codex or OpenCode), it is downloaded from its vendor. The prompts you send to an agent, and the files it works with, are sent to that agent's provider under the provider's own terms and privacy policy. You sign in to each agent with your own account.
 
-We do not share any data with third parties ourselves.
+We do not operate an intermediary transcription server or receive your recordings. Requests to third-party services described above are made directly for features you choose to use.
 
 5. Children's Privacy
 

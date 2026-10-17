@@ -94,6 +94,7 @@ fun HomeScreen(
                 // "themes" from before the screen was style; widgets still send it.
                 "style", "themes" -> state.show(SettingsPage.Style)
                 "agents" -> state.show(SettingsPage.Agents)
+                "microphone" -> state.show(SettingsPage.Microphone)
                 "store" -> state.show(SettingsPage.Store)
                 "linux" -> state.show(SettingsPage.Linux)
                 "drawer" -> state.open()
@@ -381,4 +382,3 @@ fun HomeScreen(
 
     }
 }
-

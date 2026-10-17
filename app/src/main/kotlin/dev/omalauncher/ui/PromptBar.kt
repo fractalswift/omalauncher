@@ -64,6 +64,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -110,7 +111,16 @@ internal fun PromptBar(
 ) {
     val context = LocalContext.current
     val speech = remember { Speech(context.applicationContext) }
-    DisposableEffect(speech) { onDispose { speech.cancel() } }
+    val view = LocalView.current
+    DisposableEffect(speech, view) {
+        val observer = view.viewTreeObserver
+        val listener = android.view.ViewTreeObserver.OnWindowFocusChangeListener { focused -> if (!focused) speech.cancel() }
+        observer.addOnWindowFocusChangeListener(listener)
+        onDispose {
+            if (observer.isAlive) observer.removeOnWindowFocusChangeListener(listener)
+            speech.cancel()
+        }
+    }
     val focus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -213,9 +223,9 @@ internal fun PromptBar(
             keyboard?.hide()
         }
     }
-    BackHandler(enabled = speech.listening) { speech.cancel() }
+    BackHandler(enabled = speech.listening || speech.processing) { speech.cancel() }
 
-    val listening = speech.listening
+    val listening = speech.listening || speech.processing
     // Followed in an effect and read only when drawing the level bar: the mic updates it many times a second,
     // and reading it here would recompose the whole bar each time.
     val level = remember { Animatable(0f) }
@@ -263,7 +273,7 @@ internal fun PromptBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AgentPicker(runtime, onManage = { if (linux) state.show(SettingsPage.Agents) else offerLinux() })
-                val shown = if (listening) speech.text else text
+                val shown = if (speech.processing) "Transcribing…" else if (listening) speech.text else text
                 BasicTextField(
                     value = shown,
                     onValueChange = {
@@ -323,8 +333,8 @@ internal fun PromptBar(
                 MicButton(
                     listening = listening,
                     // A tap dictates into the field and stops at the next pause; another tap stops it sooner.
-                    onTap = { if (speech.listening) speech.stop() else talk(hold = false) },
-                    onHold = { talk(hold = true) },
+                    onTap = { if (speech.processing) speech.cancel() else if (speech.listening) speech.stop() else talk(hold = false) },
+                    onHold = { if (!speech.processing) talk(hold = true) },
                     onRelease = { if (speech.listening) speech.stop() },
                     onCancel = {
                         speech.cancel()
