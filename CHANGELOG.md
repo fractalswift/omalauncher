@@ -6,6 +6,19 @@ Dates are when the build was uploaded to Play.
 
 ## Unreleased (fork)
 
+- Tailscale SSH widget can discover devices directly via the launcher's encrypted
+  API configuration, with cached lists, throttled refresh and in-widget setup.
+  Existing SSH-based discovery remains as a fallback; tmux sessions are unchanged.
+- SSH widget errors offer Open authentication and Copy link for Tailscale SSH
+  approval URLs, plus Copy error details. Untouched built-in copies update in
+  place while preserving saved hosts and usernames.
+- Built-in Tailscale SSH sessions is searchable by Tailscale, SSH or tmux and
+  appears first in the built-in section, including the dev category.
+- Add widget includes a built-in Tailscale SSH sessions tile with remote tmux
+  previews and tap-to-resume. Fresh installs start with empty settings; existing
+  personalized SSH session widgets are recognized and preserved.
+- Microphone settings supports Groq transcription with encrypted key storage and
+  optional existing-model Android offline fallback.
 - Machines & Sessions manages local and SSH foot windows with stable identities,
   optional tmux persistence, explicit resume/new/end actions, a recent-sessions
   widget, and cached Tailscale API discovery using an Android-encrypted token.

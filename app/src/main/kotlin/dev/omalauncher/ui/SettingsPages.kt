@@ -26,6 +26,8 @@ enum class SettingsPage {
     Licenses,
     Gestures,
     Sessions,
+    Microphone,
+    Tailscale,
 }
 
 /** Opens [page] over the ones in [stack]; one that's already open comes back to the top, closing what's over it. */
@@ -83,6 +85,7 @@ private fun SettingsPage(
                 onLicenses = { stack.push(SettingsPage.Licenses) },
                 onGestures = { stack.push(SettingsPage.Gestures) },
                 onSessions = { stack.push(SettingsPage.Sessions) },
+                onMicrophone = { stack.push(SettingsPage.Microphone) },
             )
         SettingsPage.Style -> StyleScreen(runtime, onDismiss = close, onBrowse = { stack.push(SettingsPage.Themes) })
         SettingsPage.Themes -> ThemeCatalogScreen(runtime.themes, onDismiss = close)
@@ -101,5 +104,7 @@ private fun SettingsPage(
         SettingsPage.Licenses -> LicensesScreen(onDismiss = close)
         SettingsPage.Gestures -> GesturesScreen(runtime, onDismiss = close)
         SettingsPage.Sessions -> SessionsScreen(runtime, homePage, onDismiss = close)
+        SettingsPage.Microphone -> MicrophoneScreen(onDismiss = close)
+        SettingsPage.Tailscale -> DiscoveryDialog(runtime, onDismiss = close)
     }
 }

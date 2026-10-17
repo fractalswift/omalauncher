@@ -284,6 +284,22 @@ class WidgetEngine(
         }
     }
 
+    /** The SSH/tmux widget, including the personalized copy used by earlier fork builds. */
+    fun hasTailscaleSessionsWidget() = specs.any {
+        it.file.name == "tailscale-ssh-sessions.owl" ||
+            (it.file.name == "machines-sessions.owl" && it.name == "SSH sessions")
+    }
+
+    suspend fun addTailscaleSessionsWidget(page: Int) = withContext(Dispatchers.IO) {
+        if (!hasTailscaleSessionsWidget()) {
+            val name = "tailscale-ssh-sessions.owl"
+            if (!File(dir, name).exists()) {
+                setPage(name, page)
+                File(dir, name).writeBytes(context.assets.open("widgets/examples/65-tailscale.owl").use { it.readBytes() })
+            }
+        }
+    }
+
     /** What a widget from a share link is saved as is there already, with the same text (null when it isn't there). */
     fun sharedWidgetIsSame(shared: Shared): Boolean? = File(dir, shared.fileName).takeIf { it.exists() }?.let { it.readText() == shared.text }
 
@@ -810,6 +826,18 @@ class WidgetEngine(
             add(asset("widgets/README.md", File(dir, "README.md"), Policy.Owned))
             for (name in assets.list("widgets/examples").orEmpty()) add(asset("widgets/examples/$name", File(dir, "examples/$name"), Policy.Seeded))
             for (name in assets.list("widgets").orEmpty().filter { it.endsWith(".owl") }) add(asset("widgets/$name", File(dir, name), Policy.Seeded))
+            val sshWidget = File(dir, "tailscale-ssh-sessions.owl")
+            if (sshWidget.exists()) {
+                // Earlier fork builds copied this built-in without registering it as
+                // managed. Adopt only the exact shipped version; personal edits stay user-owned.
+                val current = sshWidget.readBytes()
+                val legacy = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(current).joinToString("") { "%02x".format(it) } in
+                    setOf("63d91ba9fd634736569f859a191b72466c713f5859a0d891748272d7f68d44a1",
+                        "831cf765e145934a83fb43fd80c1b7b5c80b6340235f021550ee99d44c9f1f1b")
+                val pristine = legacy || current.contentEquals(assets.open("widgets/examples/65-tailscale.owl").use { it.readBytes() })
+                add(asset("widgets/examples/65-tailscale.owl", sshWidget, if (pristine) Policy.Owned else Policy.Seeded))
+            }
         }
     }
 

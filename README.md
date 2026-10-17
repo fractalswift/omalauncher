@@ -39,8 +39,7 @@ narrows the list, and Enter opens the highlighted app or sends the text to the
 agent. Short queries that name an app open it, sentences go to the agent; Tab
 and the arrow keys move the highlight. Tap the agent's name to pick another
 installed one; the choice is saved in `~/.config/omalauncher/agent`. Hold the mic to talk and release to send, or tap it to dictate
-into the field. Speech is recognized by Android (on the device when the phone
-supports it), so only text reaches Linux.
+into the field. Settings › microphone selects Android speech (the default) or Groq Whisper with your own key. Only text reaches Linux.
 
 Touch input in Linux windows: tap is a left click, long press is a right
 click, drag scrolls; apps with touch support (foot, GTK) get real touch.
@@ -50,8 +49,7 @@ and Super+W (close) in Linux windows.
 
 The terminal's helper-key panel has a microphone button: tap to dictate, then
 tap again to finish and insert the transcript without pressing Enter. It uses
-Android speech recognition, preferring on-device recognition when available.
-Leaving the window cancels dictation.
+the same microphone settings as the prompt bar. An optional offline fallback uses only an existing on-device recognizer/model: nothing is downloaded or installed. Without one, offline dictation is unavailable. Leaving the window cancels recording or transcription.
 
 The image button below the microphone attaches the **latest Android screenshot**
 to a local agent prompt. Grant photo access on first use, then reopen the keyboard
@@ -128,6 +126,8 @@ the release app, with separate data and Linux setup. You can launch guest comman
 - [docs/RELEASING.md](docs/RELEASING.md): Play releases and store assets
 - [app/src/main/assets/widgets/README.md](app/src/main/assets/widgets/README.md):
   the widget language
+- [docs/MICROPHONE.md](docs/MICROPHONE.md): Groq credentials, recording, optional offline recognition and testing
+- [docs/TAILSCALE_SSH_WIDGET.md](docs/TAILSCALE_SSH_WIDGET.md): built-in tmux session widget, discovery and setup on another phone
 
 ## Layout
 

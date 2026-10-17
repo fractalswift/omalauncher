@@ -1,307 +1,153 @@
 package dev.omalauncher.ui
 
 import android.content.Context
-import android.content.Intent
+import android.media.MediaRecorder
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
-import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.speech.RecognitionListener
-import android.speech.RecognitionSupport
-import android.speech.RecognitionSupportCallback
-import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
-/**
- * Android speech recognition for the prompt bar. The guest has no microphone,
- * so speech becomes text here and only text reaches Linux. Prefers the
- * on-device recognizer (offline, fast) and falls back to the regular one when
- * it has no model for the language. Main thread only, like SpeechRecognizer.
- */
-class Speech(
-    private val context: Context,
-) {
-    var listening by mutableStateOf(false)
-        private set
-
-    /** What's been recognized so far: finished segments plus the current partial result. */
-    var text by mutableStateOf("")
-        private set
-
-    /** Input loudness, 0..1. */
-    var level by mutableFloatStateOf(0f)
-        private set
-
-    /** Why recognition failed; the UI clears it once shown. */
-    var error by mutableStateOf<String?>(null)
-
-    private var recognizer: SpeechRecognizer? = null
-    private var onDevice = true
-    private var finished = ""
-    private var onDone: ((String) -> Unit)? = null
+/** Shared by both mic buttons. Android owns capture, settings and credentials; Linux receives only text. */
+class Speech(private val context: Context) {
+    private val android = AndroidSpeech(context)
+    private val settings = DictationSettings(context)
     private val handler = Handler(Looper.getMainLooper())
-    private var pendingRetry: Runnable? = null
-    private var canRetryStartup = false
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var cloud by mutableStateOf(false)
+    private var recording by mutableStateOf(false)
+    var processing by mutableStateOf(false)
+        private set
+    private var cloudText by mutableStateOf("")
+    private var cloudLevel by mutableFloatStateOf(0f)
+    private var cloudError by mutableStateOf<String?>(null)
+    private var recorder: MediaRecorder? = null
+    private var clip: File? = null
+    private var request: GroqSpeechRequest? = null
+    private var job: Job? = null
+    private var done: ((String) -> Unit)? = null
+    private var generation = 0
 
-    /** While held, pauses don't end recognition: a new segment starts until [stop]. */
-    private var held = false
+    val listening get() = if (cloud) recording else android.listening
+    val text get() = if (cloud) cloudText else android.text
+    val level get() = if (cloud) cloudLevel else android.level
+    var error: String?
+        get() = cloudError ?: android.error
+        set(value) { cloudError = value; android.error = null }
+    val available get() = settings.provider == DictationProvider.Groq || android.available
 
-    private val onDeviceAvailable get() = Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
-
-    val available get() = onDeviceAvailable || SpeechRecognizer.isRecognitionAvailable(context)
-
-    /**
-     * Starts listening; [onDone] gets the full text (maybe empty) once recognition ends.
-     * With [hold], it keeps listening across pauses until [stop] or [letGo].
-     */
-    fun start(
-        hold: Boolean,
-        onDone: (String) -> Unit,
-    ) {
+    fun start(hold: Boolean, onDone: (String) -> Unit) {
+        val existing = clip
+        if (existing?.isFile == true && !recording && !processing && settings.provider == DictationProvider.Groq) {
+            error = null; done = onDone
+            if (!online(context)) { error = "No internet; the recording is kept until you retry or leave this window"; return }
+            upload(existing)
+            return
+        }
         cancel()
         error = null
-        if (!available) {
-            error = "no speech recognizer on this phone"
-            return
+        cloudText = ""
+        val offline = onDeviceAvailable(context)
+        when (dictationRoute(settings.provider, online(context), offline, settings.fallback)) {
+            DictationRoute.Android -> { cloud = false; android.start(hold, language = settings.language, onDone = onDone) }
+            DictationRoute.OnDevice -> { cloud = false; android.start(hold, offlineOnly = true, language = settings.language, onDone = onDone) }
+            DictationRoute.Unavailable -> { error = "No internet and no existing offline recognition available; no model will be installed" }
+            DictationRoute.Groq -> {
+                cloud = true
+                if (settings.key().isBlank()) { error = "Add your Groq API key in Settings → Microphone"; return }
+                done = onDone
+                try {
+                    val file = File.createTempFile("dictation-", ".m4a", context.cacheDir)
+                    clip = file
+                    @Suppress("DEPRECATION")
+                    val r = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(context) else MediaRecorder()
+                    recorder = r
+                    r.setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+                    r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                    r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                    r.setAudioChannels(1); r.setAudioSamplingRate(16000); r.setAudioEncodingBitRate(64000)
+                    r.setMaxDuration(120_000); r.setMaxFileSize(10 * 1024 * 1024L)
+                    r.setOutputFile(file.absolutePath)
+                    r.setOnInfoListener { _, what, _ -> if (recorder === r && (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED || what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED)) stop() }
+                    r.setOnErrorListener { _, _, _ -> if (recorder === r) { cancel(); error = "Recording failed; please try again" } }
+                    r.prepare(); r.start(); recording = true
+                    handler.post(meter)
+                } catch (_: Exception) { cancel(); error = "Could not record audio; check microphone permission and try again" }
+            }
         }
-        held = hold
-        canRetryStartup = true
-        this.onDone = onDone
-        finished = ""
-        text = ""
-        listening = true
-        listen()
     }
 
-    /** Ends recognition now; the text so far goes to onDone. */
+    private val meter = object : Runnable {
+        override fun run() {
+            if (!recording) return
+            cloudLevel = ((runCatching { recorder?.maxAmplitude ?: 0 }.getOrDefault(0)) / 10000f).coerceIn(0f, 1f)
+            handler.postDelayed(this, 100)
+        }
+    }
+
     fun stop() {
-        held = false
-        if (pendingRetry != null) {
-            clearRetry()
-            finish()
-            return
+        if (!cloud) return android.stop()
+        if (!recording) return
+        recording = false; cloudLevel = 0f; handler.removeCallbacks(meter)
+        try { recorder?.stop() } catch (_: RuntimeException) {
+            cancel(); error = "Recording was too short; please try again"; return
+        } finally { recorder?.release(); recorder = null }
+        clip?.let(::upload)
+    }
+    fun letGo() { if (!cloud) android.letGo() }
+
+    private fun upload(file: File) {
+        processing = true
+        val token = generation
+        val next = GroqSpeechRequest(settings.key(), settings.model, settings.language.substringBefore('-').lowercase())
+        request = next
+        job = scope.launch {
+            try {
+                val transcript = withContext(Dispatchers.IO) { next.transcribe(file) }
+                if (token != generation) return@launch
+                processing = false; cloudText = transcript
+                clip = null; file.delete(); request = null
+                val callback = done; done = null
+                callback?.invoke(transcript)
+            } catch (_: CancellationException) {
+                // cancel() already cleared the destination and recording.
+            } catch (e: Exception) {
+                if (token == generation) {
+                    processing = false; request = null
+                    error = if (e is IllegalArgumentException) e.message else "${e.message?.takeIf { it.startsWith("Groq") } ?: "Could not reach Groq"}. Tap the microphone to retry; leaving this window discards the recording."
+                }
+            }
         }
-        recognizer?.stopListening() ?: finish()
     }
 
-    /** Keeps listening, but ends at the next pause instead of at [stop]. */
-    fun letGo() {
-        held = false
-    }
-
-    /** Ends recognition without calling onDone. */
     fun cancel() {
-        clearRetry()
-        held = false
-        onDone = null
-        recognizer?.destroy()
-        recognizer = null
-        listening = false
-        level = 0f
-    }
-
-    /**
-     * The language to recognize: the phone's, or the closest one the recognizer
-     * has a model for. Recognizers only know common language-region pairs, so a
-     * phone set to English (Germany) needs en-US or en-GB instead. Null until checked.
-     */
-    private var language: String? = null
-
-    private fun listen() {
-        recognizer?.destroy()
-        onDevice = onDevice && onDeviceAvailable
-        val r =
-            if (onDevice && Build.VERSION.SDK_INT >= 31) {
-                SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-            } else {
-                SpeechRecognizer.createSpeechRecognizer(context)
-            }
-        recognizer = r
-        r.setRecognitionListener(Listener(r))
-        if (language != null || Build.VERSION.SDK_INT < 33) return r.startListening(intent())
-        r.checkRecognitionSupport(
-            intent(),
-            context.mainExecutor,
-            object : RecognitionSupportCallback {
-                override fun onSupportResult(support: RecognitionSupport) {
-                    if (r !== recognizer) return
-                    language = closestLanguage(support)
-                    if (onDevice && language == null) {
-                        useRegularRecognizer(r)
-                        return
-                    }
-                    Log.i(TAG, "recognizing ${language ?: "the default language"}")
-                    r.startListening(intent())
-                }
-
-                override fun onError(error: Int) {
-                    if (r === recognizer) r.startListening(intent())
-                }
-            },
-        )
-    }
-
-    private fun intent() =
-        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-            .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            .apply { language?.let { putExtra(RecognizerIntent.EXTRA_LANGUAGE, it) } }
-
-    /**
-     * The phone's language-region if supported, else the same language in another
-     * region: installed models first, then the language's home region (de-DE),
-     * then en-US style defaults, then any.
-     */
-    @androidx.annotation.RequiresApi(33)
-    private fun closestLanguage(support: RecognitionSupport): String? {
-        val pools =
-            if (onDevice) {
-                // Supported languages may need a download; only installed models can work now.
-                listOf(support.installedOnDeviceLanguages)
-            } else {
-                listOf(support.onlineLanguages, support.installedOnDeviceLanguages)
-            }
-        return speechLanguage(Locale.getDefault(), pools)
-    }
-
-    private fun finish() {
-        clearRetry()
-        recognizer?.destroy()
-        recognizer = null
-        listening = false
-        level = 0f
-        val done = onDone
-        onDone = null
-        done?.invoke(text.trim())
-    }
-
-    private fun clearRetry() {
-        pendingRetry?.let(handler::removeCallbacks)
-        pendingRetry = null
-    }
-
-    /** Some recognition services disconnect on a cold start, then succeed on reconnect. */
-    private fun retryStartup(r: SpeechRecognizer) {
-        canRetryStartup = false
-        Log.i(TAG, "speech service failed at startup; retrying once")
-        reconnect(r)
-    }
-
-    private fun useRegularRecognizer(r: SpeechRecognizer) {
-        Log.i(TAG, "no installed on-device model for this language, using the regular recognizer")
-        onDevice = false
-        language = null
-        reconnect(r)
-    }
-
-    /** Give the old service time to release its connection before binding a replacement. */
-    private fun reconnect(r: SpeechRecognizer) {
-        // Ignore any late callbacks from this service before destroying its connection.
-        recognizer = null
-        r.destroy()
-        val retry = Runnable {
-            pendingRetry = null
-            if (listening) listen()
-        }
-        pendingRetry = retry
-        handler.postDelayed(retry, 300L)
-    }
-
-    private fun join(
-        a: String,
-        b: String,
-    ) = listOf(a, b).filter { it.isNotBlank() }.joinToString(" ") { it.trim() }
-
-    private fun Bundle.best() = getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
-
-    /** Listens to one recognizer; callbacks from one that's been replaced are ignored. */
-    private inner class Listener(
-        private val r: SpeechRecognizer,
-    ) : RecognitionListener {
-        private val current get() = r === recognizer
-
-        override fun onPartialResults(partial: Bundle) {
-            if (current) text = join(finished, partial.best())
-        }
-
-        override fun onResults(results: Bundle) {
-            if (!current) return
-            finished = join(finished, results.best())
-            text = finished
-            if (held) listen() else finish()
-        }
-
-        override fun onError(code: Int) {
-            if (!current) return
-            when (code) {
-                SpeechRecognizer.ERROR_CLIENT, SpeechRecognizer.ERROR_SERVER_DISCONNECTED ->
-                    if (canRetryStartup && text.isBlank()) retryStartup(r) else fail("speech recognition failed ($code)")
-                // Silence or nothing understood: fine while the button is held.
-                SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> if (held) listen() else finish()
-                SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE ->
-                    if (onDevice) {
-                        useRegularRecognizer(r)
-                    } else {
-                        fail("speech isn't available in this language")
-                    }
-                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> fail("microphone permission needed")
-                SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> fail("speech recognition needs a network connection")
-                else -> fail("speech recognition failed ($code)")
-            }
-        }
-
-        private fun fail(message: String) {
-            Log.w(TAG, message)
-            // Keep what was already recognized; the error is only worth showing when there's nothing.
-            if (text.isBlank()) error = message
-            finish()
-        }
-
-        override fun onRmsChanged(rmsdB: Float) {
-            if (current) level = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
-        }
-
-        override fun onReadyForSpeech(params: Bundle?) {}
-
-        override fun onBeginningOfSpeech() {}
-
-        override fun onBufferReceived(buffer: ByteArray?) {}
-
-        override fun onEndOfSpeech() {}
-
-        override fun onEvent(
-            eventType: Int,
-            params: Bundle?,
-        ) {}
+        generation++
+        done = null; android.cancel(); handler.removeCallbacks(meter)
+        request?.cancel(); request = null; job?.cancel(); job = null
+        runCatching { recorder?.stop() }; recorder?.release(); recorder = null
+        recording = false; processing = false; cloudLevel = 0f
+        clip?.delete(); clip = null
     }
 
     companion object {
-        private const val TAG = "speech"
+        fun onDeviceAvailable(context: Context) = Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+        fun online(context: Context): Boolean {
+            val manager = context.getSystemService(ConnectivityManager::class.java) ?: return false
+            val caps = manager.getNetworkCapabilities(manager.activeNetwork) ?: return false
+            return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        }
     }
-}
-
-/** Prefer an exact locale within each model pool before trying a different region. */
-internal fun speechLanguage(locale: Locale, pools: List<List<String>>): String? {
-    val wanted = locale.toLanguageTag()
-    val home = "${locale.language}-${locale.language}"
-    for (pool in pools) {
-        pool.firstOrNull { it.equals(wanted, ignoreCase = true) }?.let { return it }
-        pool.filter { it.substringBefore('-').equals(locale.language, ignoreCase = true) }
-            .minByOrNull {
-                when {
-                    it.equals(home, ignoreCase = true) -> 0
-                    it.endsWith("-US", ignoreCase = true) -> 1
-                    else -> 2
-                }
-            }?.let { return it }
-    }
-    return null
 }

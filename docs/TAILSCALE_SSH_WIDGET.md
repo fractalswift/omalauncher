@@ -1,0 +1,67 @@
+# Tailscale SSH sessions widget
+
+In the home-screen menu, open **browse store → widgets → all → built in**, then tap **Tailscale SSH sessions** to add
+the remote tmux session list to the current home page. It shows running
+sessions and terminal previews; tap a session to resume it, or choose
+**New terminal**. The **×** button ends that session and its programs.
+
+The APK bundles both the widget and its `examples/oma-ssh-sessions` helper.
+No community-store download is needed. The tmux interface is separate from the
+native **Settings → machines & sessions** manager, but shares its encrypted
+Tailscale API discovery configuration.
+
+## First-time setup on another phone
+
+1. Set up the launcher's Linux environment and install `openssh` there if
+   needed (`sudo pacman -S openssh`). Install `tmux` and `python3` on the
+   remote machines.
+2. Connect the Android Tailscale app to your tailnet and allow the launcher
+   through its VPN routing.
+3. Establish SSH access from a launcher terminal to each destination. Complete
+   first-time host verification and configure your SSH authentication there.
+   The widget polls with `BatchMode=yes`, so it needs noninteractive SSH access.
+4. Open the widget's **Expand → Settings → Set up Tailscale API discovery**.
+   Open the Tailscale API-key page, generate an API access token (not a device
+   auth key), and enter it in the native dialog. Keep Tailnet as `-` unless
+   specifying a different tailnet. Tap **save & discover**. An existing token
+   from Machines & Sessions is reused automatically; no second key is needed.
+5. Choose **Machines**, select a destination, and set its SSH username under
+   **Settings** if needed. Usernames are saved per machine. A blank username
+   uses the guest's SSH configuration.
+
+The widget receives cached device names, addresses and last-seen dates from
+`android.tailscale`. Native Android code contacts Tailscale's HTTPS API directly.
+The encrypted API token never enters the widget, Linux, SSH or an agent.
+Automatic refresh is limited to once per minute while in use; the widget's
+refresh button requests a fresh list. Cached devices remain available on errors.
+Devices are not filtered by online status: being listed does not promise SSH access.
+
+No discovery laptop is needed with API discovery. SSH is used only for the tmux
+operations on the selected destination. Keep its **SSH user** configured as before.
+
+## Optional legacy discovery
+
+Existing **SSH discovery host** settings are preserved and remain a fallback
+until API discovery is configured. The widget can still run
+`tailscale status --json` over SSH on that host, or use a configured guest CLI.
+In the widget's settings, toggle API preference off to explicitly keep this method.
+Once API discovery is configured and preferred, the widget does not SSH to the
+discovery host, including while the native configuration is loading.
+
+If Tailscale requests an additional SSH authentication check, the error panel
+offers **Open authentication** and **Copy link**. Complete the check in the
+browser, return to the widget and tap retry/refresh. **Copy error details**
+copies the full error, including text truncated on the home tile.
+
+## Updates and personal settings
+
+Fresh widgets have empty hosts, usernames and machine selections. Credentials,
+SSH keys and settings are not included in the distributed APK. Installing an
+APK on another phone does not copy those from an existing phone.
+
+An existing `machines-sessions.owl` named **SSH sessions** is recognized as
+the earlier personalized widget and is not replaced. New installations use
+`tailscale-ssh-sessions.owl`, keeping the native session-manager widget separate.
+Adding the widget never overwrites an existing file or resets its saved state.
+APK updates refresh untouched built-in `tailscale-ssh-sessions.owl` copies;
+personal edits and the original personalized `machines-sessions.owl` are left alone.

@@ -1,6 +1,7 @@
 package dev.omalauncher.sessions
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -12,6 +13,7 @@ import dev.omalauncher.ui.SettingsPage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
@@ -48,6 +50,14 @@ class SessionManager(
         private set
     var tailnet by mutableStateOf(credentials.tailnet)
         private set
+    val discoveredMachines = mutableStateListOf<Machine>()
+    var discoveryError by mutableStateOf<String?>(null)
+        private set
+    var discoveryUpdatedAt by mutableStateOf(prefs.getLong("discovery_updated_at", 0))
+        private set
+    private var discoveryJob: Job? = null
+    private var discoveryGeneration = 0
+    private var lastDiscoveryAttempt: Long? = null
     private var loadFailed = false
 
     init {
@@ -60,6 +70,10 @@ class SessionManager(
             message = "Could not read saved sessions; existing data has been preserved."
         }
         if (machines.none { it.local }) machines.add(0, Machine.PHONE)
+        val cached = runCatching {
+            prefs.getString("discovery_devices", null)?.let { JSONArray(it).mapObjects(Machine::from) }
+        }.getOrNull() ?: machines.filter { it.id.startsWith("tailscale-") }
+        discoveredMachines.addAll(cached)
     }
 
     private fun save() {
@@ -219,12 +233,17 @@ class SessionManager(
 
     fun configureDiscovery(tailnet: String, token: String) {
         credentials.save(tailnet, token)
+        resetDiscoveryRequest()
+        discoveredMachines.clear()
+        discoveryUpdatedAt = 0
+        prefs.edit().remove("discovery_devices").remove("discovery_updated_at").apply()
         this.tailnet = credentials.tailnet
         discoveryConfigured = credentials.configured
     }
 
     fun clearDiscovery() {
         credentials.clear()
+        resetDiscoveryRequest()
         tailnet = "-"
         discoveryConfigured = false
         message = "Discovery token removed. Saved machines and sessions are still available."
@@ -232,23 +251,65 @@ class SessionManager(
 
     fun discover() {
         if (discovering) return
+        if (!discoveryConfigured) {
+            discoveryError = "Configure a Tailscale API token to discover devices"
+            message = discoveryError
+            return
+        }
+        val generation = discoveryGeneration
+        lastDiscoveryAttempt = SystemClock.elapsedRealtime()
+        discoveryError = null
         discovering = true
-        task {
+        discoveryJob = scope.launch {
             try {
                 val found = withContext(Dispatchers.IO) { TailscaleDiscovery.fetch(credentials.tailnet, credentials.token()) }
                 val localAddresses = withContext(Dispatchers.IO) {
                     runCatching { NetworkInterface.getNetworkInterfaces().toList().flatMap { it.inetAddresses.toList() }.map { it.hostAddress }.toSet() }
                         .getOrDefault(emptySet())
                 }
-                for (discovered in found) {
-                    if (discovered.host in localAddresses) continue
+                if (generation != discoveryGeneration) return@launch
+                val devices = found.filter { it.host !in localAddresses }
+                for (discovered in devices) {
                     val index = machines.indexOfFirst { it.id == discovered.id }
                     if (index < 0) machines += discovered
                     else machines[index] = machines[index].copy(host = discovered.host, lastSeen = discovered.lastSeen)
                 }
                 save()
+                discoveredMachines.clear()
+                discoveredMachines.addAll(devices)
+                discoveryUpdatedAt = System.currentTimeMillis()
+                prefs.edit().putString("discovery_devices", JSONArray(devices.map { it.json() }).toString())
+                    .putLong("discovery_updated_at", discoveryUpdatedAt).apply()
                 message = "Device list updated. Set an SSH username for each machine, or use ~/.ssh/config."
-            } finally { discovering = false }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (generation == discoveryGeneration) {
+                    // Never expose provider responses, headers or credentials to widgets.
+                    discoveryError = e.message?.takeIf { it.startsWith("Tailscale ") }
+                        ?: "Could not refresh Tailscale devices. Check your internet connection and discovery settings."
+                    message = discoveryError
+                }
+            } finally {
+                if (generation == discoveryGeneration) discovering = false
+            }
         }
+    }
+
+    /** Widgets can poll cached data frequently without polling the control-plane API every time. */
+    fun discoverIfStale() {
+        if (!discoveryConfigured || discovering) return
+        val now = SystemClock.elapsedRealtime()
+        if (lastDiscoveryAttempt?.let { now - it < 60_000 } == true) return
+        discover()
+    }
+
+    private fun resetDiscoveryRequest() {
+        discoveryGeneration++
+        discoveryJob?.cancel()
+        discoveryJob = null
+        discovering = false
+        discoveryError = null
+        lastDiscoveryAttempt = null
     }
 }

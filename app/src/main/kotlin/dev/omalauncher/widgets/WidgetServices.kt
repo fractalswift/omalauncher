@@ -153,6 +153,7 @@ class WidgetServices(
             "modes" -> modes.value()
             "apps" -> apps()
             "sessions" -> sessionSummary()
+            "tailscale" -> tailscaleSummary()
             else -> throw WidgetError("unknown android source $name")
         }
 
@@ -191,6 +192,22 @@ class WidgetServices(
                 "machine" to Str(manager.machine(session.machineId)?.name.orEmpty()), "status" to Str(manager.label(session))))
         }
         return Obj(mapOf("count" to Num(manager.sessions.size.toDouble()), "items" to Lst(items)))
+    }
+
+    /** Cached control-plane data only; tokens never enter OWL or the Linux environment. */
+    private fun tailscaleSummary(): Value {
+        val manager = runtime.sessions
+        scope.launch { manager.discoverIfStale() }
+        return Obj(mapOf(
+            "configured" to bool(manager.discoveryConfigured),
+            "syncing" to bool(manager.discovering),
+            "error" to (manager.discoveryError?.let(::Str) ?: Null),
+            "updatedAt" to Num(manager.discoveryUpdatedAt / 1000.0),
+            "items" to Lst(manager.discoveredMachines.sortedBy { it.name.lowercase() }.map { machine ->
+                Obj(mapOf("id" to Str(machine.id), "name" to Str(machine.name),
+                    "host" to Str(machine.host), "lastSeen" to Str(machine.lastSeen)))
+            }),
+        ))
     }
 
     /** "work" or "clone" for an app in a profile beside the launcher's own, as the drawer marks it; null for its own. */

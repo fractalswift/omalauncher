@@ -1,0 +1,191 @@
+widget "SSH sessions" {
+  page: 2
+  order: 3
+  size: 6x4
+  minSize: 3x3
+  meta { description: "Choose any Tailscale machine, resume its terminals with live previews, start new ones, or end a workspace with its close button"; version: "2.4"; license: "MIT"; category: "dev"; owl: 6 }
+  requires { pacman: ["openssh"] }
+
+  state discovery = "" persist
+  state sshUser = "" persist
+  state machine = "" persist
+  state machineName = "" persist
+  state accounts = [] persist
+  state preferApi = true persist
+  state view = "sessions"
+  state endResult = ""
+  let login = accounts.find(a => a.host == machine).user ?? sshUser
+
+  source devices = android.tailscale every 5s
+  let apiDiscovery = preferApi && devices.configured == true
+  source tailnet = cmd(apiDiscovery || (preferApi && devices == null) ? "printf '%s\\n' '{}'" : "if [ -n ${sh(discovery)} ]; then ssh -o BatchMode=yes -o ConnectTimeout=5 -- ${sh(discovery)} tailscale status --json; elif command -v tailscale >/dev/null 2>&1; then tailscale status --json; else printf '%s\\n' 'Set up Tailscale device discovery in Settings.' >&2; exit 1; fi") every 30s timeout 10s json status
+  source work = cmd("bash ~/.config/omalauncher/widgets/examples/oma-ssh-sessions list ${sh(machine)} ${sh(login)}") every 5s timeout 12s json status
+  let nodes = (discovery != "" ? [tailnet.out.Self] : []) + values(tailnet.out.Peer ?? {})
+  let online = (apiDiscovery ? (devices.items ?? []).map(p => {ID: p.id, HostName: p.name, TailscaleIPs: [p.host]}) : nodes.filter(p => p != null && p.Online == true && p.Expired != true && len(p.TailscaleIPs ?? []) > 0)).sortBy(p => lower(p.HostName ?? ""))
+  let currentWork = work.ok && work.out.host == machine && work.out.user == login
+  let sessions = currentWork && work.out.ok ? (work.out.sessions ?? []) : []
+  let endNotice = endResult != "" ? parseJson(endResult) : null
+  let targetLabel = machineName != "" ? machineName : machine != "" ? machine : "Choose machine"
+  let workError = (work.err ?? "") != "" ? work.err : work.out.error ?? "Refresh to retry."
+  let discoveryError = apiDiscovery ? devices.error : tailnet.err ?? "Discovery unavailable"
+
+  component DiscoveryRefresh() {
+    if apiDiscovery {
+      Button { text: "↻"; onTap: { launcher("tailscale-sync"); refresh() } }
+    } else {
+      Button { text: "↻"; onTap: refresh() }
+    }
+  }
+
+  component ErrorActions(message) {
+    let authLink = match(message, "https://login[.]tailscale[.]com/[A-Za-z0-9_./?=&%+#~-]+")
+    Column {
+      gap: 6
+      if authLink != null {
+        Text { text: "Tailscale needs you to approve SSH access in your browser. Afterwards, return here and retry."; style: small; color: muted }
+        Row {
+          gap: 8
+          Button { text: "Open authentication"; onTap: url(authLink) }
+          Button { text: "Copy link"; onTap: copy(authLink) }
+        }
+      }
+      Button { text: "Copy error details"; onTap: copy(message) }
+    }
+  }
+
+  component SessionList() {
+    Column {
+      fill: true
+      gap: 8
+      if machine == "" {
+        Text { text: "Choose a machine to see its terminals."; color: muted }
+        Button { text: "Machines"; onTap: { view = "machines"; screen() } }
+      } else if work == null || (work.ok && !currentWork) {
+        Text { text: "Loading sessions…"; color: muted }
+      } else if !work.ok || !work.out.ok {
+        Text { text: "Could not load sessions"; color: yellow }
+        Text { text: workError; style: small; color: muted; maxLines: 3 }
+        ErrorActions { message: workError }
+        Button { text: "Retry"; onTap: refresh() }
+      } else if len(sessions) == 0 {
+        Text { text: "No running terminals"; color: muted }
+        Text { text: "New terminal starts one you can return to."; style: small; color: muted }
+      } else {
+        Column {
+          scroll: true
+          weight: 1
+          gap: 8
+          for s in sessions key s.id {
+            Column {
+              fill: width
+              padding: [10, 10]
+              gap: 3
+              border: 1
+              borderColor: alpha(muted, 0.3)
+              onTap: terminal("exec bash ~/.config/omalauncher/widgets/examples/oma-ssh-sessions attach ${sh(machine)} ${sh(login)} ${sh(s.id)}", "${targetLabel} · ${s.id}")
+              Row {
+                Text { text: "${s.id} · ${s.command} · ${s.folder}"; weight: 1; maxLines: 1; bold: true }
+                Text { text: "Resume"; color: accent; style: small; width: 64 }
+                Button { text: "×"; color: red; width: 44; height: 44; onTap: endResult = run("bash ~/.config/omalauncher/widgets/examples/oma-ssh-sessions end ${sh(machine)} ${sh(login)} ${sh(s.id)}") }
+              }
+              Text { text: sub(s.preview, 0, 150); style: small; color: muted; maxLines: 2 }
+            }
+          }
+        }
+      }
+      if endNotice.ok == false { Text { text: endNotice.error; style: small; color: yellow; maxLines: 2 } }
+    }
+  }
+
+  component NewTerminal() {
+    if machine != "" {
+      Button { text: "New terminal"; onTap: terminal("exec bash ~/.config/omalauncher/widgets/examples/oma-ssh-sessions new ${sh(machine)} ${sh(login)}", "${targetLabel} · new terminal") }
+    }
+  }
+
+  Column {
+    gap: 10
+    Row {
+      Text { text: targetLabel; style: label; weight: 1; maxLines: 1 }
+      Button { text: "Machines"; onTap: { view = "machines"; screen(); refresh() } }
+      DiscoveryRefresh { }
+      Button { text: "Expand"; onTap: { view = "sessions"; screen() } }
+    }
+    SessionList { weight: 1 }
+    NewTerminal { }
+  }
+
+  screen {
+    title: "SSH sessions · ${targetLabel}"
+    Column {
+      gap: 10
+      Row {
+        Button { text: "Sessions"; onTap: { view = "sessions"; refresh() } }
+        Button { text: "Machines"; onTap: { view = "machines"; refresh() } }
+        Button { text: "Settings"; onTap: view = "settings" }
+        DiscoveryRefresh { }
+      }
+      if view == "sessions" {
+        SessionList { weight: 1 }
+        NewTerminal { }
+      } else if view == "machines" {
+        Column {
+          scroll: true
+          weight: 1
+          if devices.configured != true {
+            Text { text: "Set up Tailscale API discovery to list devices directly from this phone, without a discovery laptop."; style: small; color: muted }
+            Button { text: "Set up device discovery"; onTap: launcher("tailscale") }
+          }
+          if apiDiscovery {
+            Text { text: devices.syncing ? "Refreshing Tailscale devices…" : "Devices from Tailscale API (availability is checked when connecting)"; style: small; color: muted }
+            if devices.error != null {
+              Text { text: discoveryError; color: yellow; maxLines: 3 }
+              ErrorActions { message: discoveryError }
+              Button { text: "Discovery settings"; onTap: launcher("tailscale") }
+            }
+            if len(online) == 0 && !devices.syncing {
+              Text { text: "No devices cached yet. Refresh or check discovery settings."; color: muted; style: small }
+            }
+          } else if !tailnet.ok {
+            Text { text: discoveryError; color: yellow; maxLines: 3 }
+            ErrorActions { message: discoveryError }
+          }
+          for peer in online key peer.ID {
+            let address = first(peer.TailscaleIPs)
+            let peerUser = accounts.find(a => a.host == address).user ?? sshUser
+            Row {
+              Button {
+                text: peer.HostName ?? first(peer.TailscaleIPs)
+                weight: 1
+                onTap: { machine = first(peer.TailscaleIPs); machineName = peer.HostName ?? machine; endResult = ""; view = "sessions"; refresh() }
+              }
+              Button {
+                text: "New terminal"
+                onTap: { machine = address; machineName = peer.HostName ?? address; endResult = ""; view = "sessions"; terminal("exec bash ~/.config/omalauncher/widgets/examples/oma-ssh-sessions new ${sh(address)} ${sh(peerUser)}", "${peer.HostName ?? address} · new terminal"); refresh() }
+              }
+            }
+          }
+        }
+      } else {
+        Column {
+          scroll: true
+          gap: 10
+          Text { text: "Device discovery"; style: label }
+          Button { text: devices.configured == true ? "Tailscale API settings" : "Set up Tailscale API discovery"; onTap: launcher("tailscale") }
+          Text { text: "The API token is saved encrypted on Android, shared with Machines & Sessions, and never sent to Linux. No discovery laptop is needed once configured."; style: small; color: muted }
+          Button { text: preferApi ? "✓ Prefer Tailscale API (SSH fallback until configured)" : "Use Tailscale API instead of SSH discovery"; onTap: { preferApi = !preferApi; refresh() } }
+          Text { text: "SSH discovery host (optional fallback)"; style: label }
+          Input { text: discovery; placeholder: "user@100.x.y.z"; onSubmit: { discovery = trim(value); refresh() } }
+          Text { text: "SSH user for this machine"; style: label }
+          Input { text: login; placeholder: "blank uses SSH config"; onSubmit: { accounts = accounts.filter(a => a.host != machine) + [{host: machine, user: trim(value)}]; endResult = ""; refresh() } }
+          Text { text: "Selected machine IP or SSH alias"; style: label }
+          Input { text: machine; onSubmit: { machine = trim(value); machineName = machine; refresh() } }
+          Text { text: "New terminals are persistent and appear under Sessions for the selected machine. The destination needs tmux and python3. Usernames are saved per machine; blank uses SSH config. × ends a workspace and its running programs."; style: small; color: muted; maxLines: 6 }
+          if machine != "" {
+            Button { text: "Temporary SSH (not saved)"; onTap: terminal("exec bash ~/.config/omalauncher/widgets/examples/oma-ssh-sessions shell ${sh(machine)} ${sh(login)}", "Temporary SSH · ${targetLabel}") }
+          }
+        }
+      }
+    }
+  }
+}

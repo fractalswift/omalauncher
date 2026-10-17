@@ -238,7 +238,7 @@ private fun NewSessionDialog(machine: Machine, onDismiss: () -> Unit, onCreate: 
 }
 
 @Composable
-private fun DiscoveryDialog(runtime: Runtime, onDismiss: () -> Unit) {
+internal fun DiscoveryDialog(runtime: Runtime, onDismiss: () -> Unit) {
     val manager = runtime.sessions
     val context = LocalContext.current
     var tailnet by remember { mutableStateOf(manager.tailnet) }

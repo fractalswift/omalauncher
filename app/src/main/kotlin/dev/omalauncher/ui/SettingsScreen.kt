@@ -37,6 +37,7 @@ fun SettingsScreen(
     onLicenses: () -> Unit,
     onGestures: () -> Unit,
     onSessions: () -> Unit,
+    onMicrophone: () -> Unit,
 ) {
     val context = LocalContext.current
     val linux by runtime.bootstrap.state.collectAsState()
@@ -55,6 +56,7 @@ fun SettingsScreen(
                 Triple("style", runtime.themes.current?.title ?: "theme, background, home screen", onStyle),
                 Triple("gestures", "swipe up: ${runtime.gestures.swipeUp.label}", onGestures),
                 Triple("machines & sessions", "local terminals, Tailscale and persistent SSH workspaces", onSessions),
+                Triple("microphone", "Groq, Android speech and optional offline fallback", onMicrophone),
                 Triple("linux", linuxStatus, onLinux),
                 if (installed) {
                     Triple("coding agents", runtime.agents.default?.let { "default: ${it.name}" } ?: "install Claude Code, OpenCode, …", onAgents)
