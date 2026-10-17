@@ -84,6 +84,7 @@ the release app, with separate data and Linux setup. You can launch guest comman
 - [docs/RELEASING.md](docs/RELEASING.md): Play releases and store assets
 - [app/src/main/assets/widgets/README.md](app/src/main/assets/widgets/README.md):
   the widget language
+- [docs/TAILSCALE.md](docs/TAILSCALE.md): the live SSH/tmux session list with terminal previews and one-tap resumption
 
 ## Layout
 

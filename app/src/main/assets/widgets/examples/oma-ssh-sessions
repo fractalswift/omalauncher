@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# Foot connection helper. The phone needs openssh; the destination needs tmux and python3.
+set -euo pipefail
+action=${1:-}
+host=${2:-}
+user=${3:-}
+[[ -n "$host" ]] || { printf 'Choose a machine first.\n' >&2; exit 2; }
+options=(-o ConnectTimeout=8 -o ConnectionAttempts=1 -o ServerAliveInterval=30 -o ServerAliveCountMax=3)
+[[ -z "$user" ]] || options+=(-l "$user")
+remote_quote() { local value=${1//\'/\'\\\'\'}; printf "'%s'" "$value"; }
+case "$action" in
+  shell)
+    exec ssh -tt "${options[@]}" -- "$host"
+    ;;
+  new)
+    # Automatic session numbers: no naming form, and no default remote command to exit accidentally.
+    exec ssh -tt "${options[@]}" -- "$host" 'exec tmux -u new-session'
+    ;;
+  attach)
+    id=${4:-}
+    [[ "$id" =~ ^\$[0-9]+$ ]] || { printf 'Invalid session ID.\n' >&2; exit 2; }
+    # The validated ID is quoted for the remote shell. Never create a replacement on attach failure.
+    exec ssh -tt "${options[@]}" -- "$host" "exec tmux -u attach-session -t '$id'"
+    ;;
+  end)
+    id=${4:-}
+    [[ "$id" =~ ^\$[0-9]+$ ]] || { printf 'Invalid session ID.\n' >&2; exit 2; }
+    if ssh -T -o BatchMode=yes "${options[@]}" -- "$host" "exec tmux kill-session -t '$id'" >/dev/null; then
+      printf '{"ok":true}\n'
+    else
+      printf '{"ok":false,"error":"Could not end the session. Check SSH access and refresh."}\n'
+    fi
+    ;;
+  list)
+    ssh -T -o BatchMode=yes "${options[@]}" -- "$host" "python3 - $(remote_quote "$host") $(remote_quote "$user")" <<'PY'
+import json
+import shutil
+import subprocess
+import sys
+
+def run(*args):
+    return subprocess.run(["tmux", *args], capture_output=True, text=True, errors="replace", timeout=3)
+
+def clean(value, limit=160):
+    return "".join(c if c.isprintable() else " " for c in value).strip()[:limit]
+
+def listing():
+    if not shutil.which("tmux"):
+        return {"ok": False, "error": "Install tmux on this machine first.", "sessions": []}
+    result = run("list-sessions", "-F", "#{session_id}")
+    if result.returncode:
+        missing = ("no server running", "No such file or directory", "failed to connect to server", "Connection refused")
+        if any(message in result.stderr for message in missing):
+            return {"ok": True, "sessions": []}
+        return {"ok": False, "error": clean(result.stderr), "sessions": []}
+    sessions = []
+    for sid in result.stdout.splitlines():
+        details = run("display-message", "-p", "-t", sid + ":", "#{session_name}\t#{session_attached}\t#{session_windows}\t#{pane_current_command}\t#{pane_current_path}\t#{session_activity}")
+        if details.returncode:
+            continue  # The session may have ended since list-sessions.
+        fields = details.stdout.rstrip("\n").split("\t", 5)
+        if len(fields) != 6:
+            continue
+        name, attached, windows, command, cwd, activity = fields
+        capture = run("capture-pane", "-p", "-t", sid + ":", "-S", "-12")
+        tail = [clean(line, 100) for line in capture.stdout.splitlines() if line.strip()][-2:]
+        sessions.append({"id": sid, "name": clean(name, 60), "command": clean(command, 40),
+                         "cwd": clean(cwd), "folder": clean(cwd.rstrip("/").rsplit("/", 1)[-1] or "/", 50),
+                         "preview": " · ".join(tail), "attached": int(attached or 0),
+                         "windows": int(windows or 0), "activity": int(activity or 0)})
+    sessions.sort(key=lambda s: (-s["activity"], s["id"]))
+    return {"ok": True, "sessions": sessions}
+
+try:
+    result = listing()
+except (OSError, ValueError, subprocess.TimeoutExpired):
+    result = {"ok": False, "error": "Could not read tmux sessions. Refresh and try again.", "sessions": []}
+result.update(host=sys.argv[1], user=sys.argv[2])
+print(json.dumps(result))
+PY
+    ;;
+  *) printf 'Usage: oma-ssh-sessions list|new|attach|end|shell HOST USER [SESSION_ID]\n' >&2; exit 2 ;;
+esac
