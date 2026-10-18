@@ -59,6 +59,8 @@ class SessionManager(
     private var discoveryGeneration = 0
     private var lastDiscoveryAttempt: Long? = null
     private var loadFailed = false
+    var authenticationTarget by mutableStateOf<Machine?>(null)
+        private set
 
     init {
         try {
@@ -90,6 +92,12 @@ class SessionManager(
     }
 
     fun machine(id: String) = machines.firstOrNull { it.id == id }
+    fun authenticate(host: String, user: String) {
+        val target = Machine(name = host, host = host, user = user)
+        target.validate()
+        authenticationTarget = target
+        runtime.openSettings(SettingsPage.SshAuthentication)
+    }
     fun live(session: TerminalSession) = runtime.wm.appWindows.any { it.appId == session.appId }
 
     fun label(session: TerminalSession): String = when {

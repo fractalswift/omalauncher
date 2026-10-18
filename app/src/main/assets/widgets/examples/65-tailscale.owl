@@ -3,7 +3,7 @@ widget "SSH sessions" {
   order: 3
   size: 6x4
   minSize: 3x3
-  meta { description: "Choose any Tailscale machine, resume its terminals with live previews, start new ones, or end a workspace with its close button"; version: "2.4"; license: "MIT"; category: "dev"; owl: 6 }
+  meta { description: "Choose any Tailscale machine, resume its terminals with live previews, start new ones, or end a workspace with its close button"; version: "2.5"; license: "MIT"; category: "dev"; owl: 6 }
   requires { pacman: ["openssh"] }
 
   state discovery = "" persist
@@ -65,6 +65,7 @@ widget "SSH sessions" {
       } else if !work.ok || !work.out.ok {
         Text { text: "Could not load sessions"; color: yellow }
         Text { text: workError; style: small; color: muted; maxLines: 3 }
+        Button { text: "SSH sign-in"; onTap: sshAuth(machine, login) }
         ErrorActions { message: workError }
         Button { text: "Retry"; onTap: refresh() }
       } else if len(sessions) == 0 {
@@ -103,6 +104,12 @@ widget "SSH sessions" {
     }
   }
 
+  component SignIn() {
+    if machine != "" {
+      Button { text: "SSH sign-in"; onTap: sshAuth(machine, login) }
+    }
+  }
+
   Column {
     gap: 10
     Row {
@@ -127,6 +134,7 @@ widget "SSH sessions" {
       }
       if view == "sessions" {
         SessionList { weight: 1 }
+        SignIn { }
         NewTerminal { }
       } else if view == "machines" {
         Column {
@@ -182,6 +190,7 @@ widget "SSH sessions" {
           Input { text: machine; onSubmit: { machine = trim(value); machineName = machine; refresh() } }
           Text { text: "New terminals are persistent and appear under Sessions for the selected machine. The destination needs tmux and python3. Usernames are saved per machine; blank uses SSH config. × ends a workspace and its running programs."; style: small; color: muted; maxLines: 6 }
           if machine != "" {
+            SignIn { }
             Button { text: "Temporary SSH (not saved)"; onTap: terminal("exec bash ~/.config/omalauncher/widgets/examples/oma-ssh-sessions shell ${sh(machine)} ${sh(login)}", "Temporary SSH · ${targetLabel}") }
           }
         }

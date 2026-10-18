@@ -6,6 +6,9 @@ Dates are when the build was uploaded to Play.
 
 ## Unreleased (fork)
 
+- The tmux widget offers native SSH sign-in with live browser approval and copy
+  buttons, keeping the authentication connection open without terminal selection
+  or home-screen drag gestures.
 - Tailscale SSH widget can discover devices directly via the launcher's encrypted
   API configuration, with cached lists, throttled refresh and in-widget setup.
   Existing SSH-based discovery remains as a fallback; tmux sessions are unchanged.

@@ -145,4 +145,18 @@ class TailscaleAuthenticationTest {
         val source = program.globals.filterIsInstance<Global.Source>().first { it.name == "tailnet" }
         assertFalse(source.arg!!(Env.root(h)).toString().contains("ssh"))
     }
+
+    @Test fun sshErrorOffersNativeSignInForTheSelectedHostAndUser() {
+        val h = host("Tailscale SSH requires an additional check")
+        h.set("sshUser", Str("developer"))
+        tap(h, "SSH sign-in")
+        assertEquals(listOf("sshAuth" to listOf(Str("100.64.0.1"), Str("developer"))), h.actions)
+    }
+
+    @Test fun expandedSettingsOfferNativeSignInWithoutSelectingTerminalText() {
+        val h = host("")
+        h.set("view", Str("settings"))
+        tap(h, "SSH sign-in", screen = true)
+        assertEquals(listOf("sshAuth" to listOf(Str("100.64.0.1"), Str(""))), h.actions)
+    }
 }

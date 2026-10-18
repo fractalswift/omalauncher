@@ -255,6 +255,7 @@ the widget that ran it refreshes its sources; other widgets keep their own inter
 | `run("cmd")` | runs in the background (on its own shell, never retried), then refreshes this widget |
 | `x = run("cmd")` | the same, and puts the command's output into the state `x` when it finishes |
 | `androidApp("org.pkg")` | opens an Android app by package name, or by an `android.apps` key to open that copy in a work profile or clone |
+| `sshAuth(host, user?)` | fork extension: opens a native SSH sign-in screen for the selected host, with live Tailscale approval-link buttons. No terminal or tmux session is created; SSH still enforces the destination's authentication policy. |
 | `copy(text)` | copies text to the Android clipboard |
 | `notify("title", "text")` | posts an Android notification (if the launcher may post them) |
 | `url("https://...")` | opens in the Android browser. Other links open in the app that takes them: `tel:` the dialer, `geo:` maps, `mailto:` email |

@@ -28,6 +28,7 @@ enum class SettingsPage {
     Sessions,
     Microphone,
     Tailscale,
+    SshAuthentication,
 }
 
 /** Opens [page] over the ones in [stack]; one that's already open comes back to the top, closing what's over it. */
@@ -106,5 +107,6 @@ private fun SettingsPage(
         SettingsPage.Sessions -> SessionsScreen(runtime, homePage, onDismiss = close)
         SettingsPage.Microphone -> MicrophoneScreen(onDismiss = close)
         SettingsPage.Tailscale -> DiscoveryDialog(runtime, onDismiss = close)
+        SettingsPage.SshAuthentication -> SshAuthenticationScreen(runtime, onDismiss = close)
     }
 }

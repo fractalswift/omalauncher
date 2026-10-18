@@ -53,6 +53,16 @@ offers **Open authentication** and **Copy link**. Complete the check in the
 browser, return to the widget and tap retry/refresh. **Copy error details**
 copies the full error, including text truncated on the home tile.
 
+For an easier live sign-in, tap **SSH sign-in** in the session error panel or
+under **Expand → Sessions / Settings**. This opens a native screen, outside the
+home-screen widget's drag gestures. It makes a harmless SSH connection and
+keeps it open for up to three minutes while you tap **open Tailscale approval**
+or **copy approval link**. Return from the browser to see the result, then go
+back to the widget and refresh. No terminal session is created. Closing/cancelling
+the screen stops the check. First-time SSH host verification or password setup
+still needs a normal terminal connection. Policies requiring approval on every
+connection also apply to later session connections; this does not change policy.
+
 ## Updates and personal settings
 
 Fresh widgets have empty hosts, usernames and machine selections. Credentials,

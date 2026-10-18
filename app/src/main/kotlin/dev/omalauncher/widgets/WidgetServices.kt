@@ -404,6 +404,11 @@ class WidgetServices(
                     Toast.makeText(context, "no app opens $arg", Toast.LENGTH_SHORT).show()
                 }
             "launcher" -> launcherAction?.invoke(arg)
+            "sshAuth" -> try {
+                runtime.sessions.authenticate(arg, args.getOrNull(1)?.toString().orEmpty())
+            } catch (_: IllegalArgumentException) {
+                Toast.makeText(context, "Choose a valid SSH host and username in the widget settings", Toast.LENGTH_LONG).show()
+            }
             "media" -> media.control(arg)
             "volume" -> volume.control(args[0])
             "notification" -> args.getOrNull(1)?.takeIf { it != Null }?.let { notifications.control(arg, it.toString()) }

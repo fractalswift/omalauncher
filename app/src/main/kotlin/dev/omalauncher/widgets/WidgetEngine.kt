@@ -834,7 +834,8 @@ class WidgetEngine(
                 val legacy = java.security.MessageDigest.getInstance("SHA-256")
                     .digest(current).joinToString("") { "%02x".format(it) } in
                     setOf("63d91ba9fd634736569f859a191b72466c713f5859a0d891748272d7f68d44a1",
-                        "831cf765e145934a83fb43fd80c1b7b5c80b6340235f021550ee99d44c9f1f1b")
+                        "831cf765e145934a83fb43fd80c1b7b5c80b6340235f021550ee99d44c9f1f1b",
+                        "de1ddaa55a531bfa7d3452d2d3a6f80f2123c13a32ad2c36d8060ab2f292855d")
                 val pristine = legacy || current.contentEquals(assets.open("widgets/examples/65-tailscale.owl").use { it.readBytes() })
                 add(asset("widgets/examples/65-tailscale.owl", sshWidget, if (pristine) Policy.Owned else Policy.Seeded))
             }
