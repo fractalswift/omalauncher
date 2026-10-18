@@ -71,6 +71,7 @@ class SshAuthenticationTest {
         assertTrue(command.endsWith("-- '100.64.0.2' true"))
         assertFalse(command.contains("tmux"))
         assertTrue(runCatching { SshAuthentication.command(Machine.PHONE) }.isFailure)
+        assertTrue(runCatching { SshAuthentication.command(Machine(name = "Mac", host = "100.64.0.2")) }.isFailure)
         assertTrue(runCatching { SshAuthentication.command(Machine(name = "Bad", host = "host; touch injected")) }.isFailure)
     }
 

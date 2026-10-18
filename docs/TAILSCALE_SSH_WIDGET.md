@@ -26,8 +26,9 @@ Tailscale API discovery configuration.
    specifying a different tailnet. Tap **save & discover**. An existing token
    from Machines & Sessions is reused automatically; no second key is needed.
 5. Choose **Machines**, select a destination, and set its SSH username under
-   **Settings** if needed. Usernames are saved per machine. A blank username
-   uses the guest's SSH configuration.
+   **Settings**. Usernames are saved separately per machine. A new machine opens
+   username setup before any SSH connection. Blank usernames do not silently
+   use the phone guest's root account.
 
 The widget receives cached device names, addresses and last-seen dates from
 `android.tailscale`. Native Android code contacts Tailscale's HTTPS API directly.
@@ -39,14 +40,20 @@ Devices are not filtered by online status: being listed does not promise SSH acc
 No discovery laptop is needed with API discovery. SSH is used only for the tmux
 operations on the selected destination. Keep its **SSH user** configured as before.
 
-## Optional legacy discovery
+Device discovery is API-only. The former discovery SSH host, guest Tailscale CLI
+and fallback toggle have been removed from this built-in widget.
 
-Existing **SSH discovery host** settings are preserved and remain a fallback
-until API discovery is configured. The widget can still run
-`tailscale status --json` over SSH on that host, or use a configured guest CLI.
-In the widget's settings, toggle API preference off to explicitly keep this method.
-Once API discovery is configured and preferred, the widget does not SSH to the
-discovery host, including while the native configuration is loading.
+## Connecting to a Mac
+
+Use the Mac's **short account name**, as printed by `whoami` in its Terminal,
+not its display name or a username saved for another Linux machine. Enable
+**System Settings → General → Sharing → Remote Login** for that user. SSH must
+be reachable through Tailscale. Install dependencies with `brew install tmux python`
+if needed; the helper includes Apple Silicon and Intel Homebrew paths for
+noninteractive SSH commands. Each host keeps its own SSH username. The active
+`user@host` is displayed on the home tile.
+
+## SSH sign-in
 
 If Tailscale requests an additional SSH authentication check, the error panel
 offers **Open authentication** and **Copy link**. Complete the check in the

@@ -99,6 +99,7 @@ class SshAuthentication(
 
         fun command(machine: Machine): String {
             require(!machine.local) { "Choose a remote SSH machine" }
+            require(machine.user.isNotBlank()) { "Set the SSH username for this machine first" }
             machine.validate()
             val user = machine.user.takeIf { it.isNotEmpty() }?.let { " -l ${shellQuote(it)}" }.orEmpty()
             // No terminal or tmux session is created, and no API credentials are involved.

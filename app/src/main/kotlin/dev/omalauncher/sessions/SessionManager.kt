@@ -93,6 +93,7 @@ class SessionManager(
 
     fun machine(id: String) = machines.firstOrNull { it.id == id }
     fun authenticate(host: String, user: String) {
+        require(user.isNotBlank()) { "Set the SSH username for this machine first" }
         val target = Machine(name = host, host = host, user = user)
         target.validate()
         authenticationTarget = target

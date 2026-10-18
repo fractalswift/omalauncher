@@ -20,6 +20,7 @@ class TailscaleAuthenticationTest {
         override fun act(name: String, args: List<Value>) { actions += name to args }
         override fun runInto(command: String, slot: Int) {}
         fun set(name: String, value: Value) { slots[program.globals.indexOfFirst { it.name == name }] = value }
+        fun get(name: String) = read(program.globals.indexOfFirst { it.name == name })
     }
 
     private fun elements(nodes: List<WNode>, env: Env): List<Pair<WNode.Element, Env>> = nodes.flatMap { node ->
@@ -35,6 +36,7 @@ class TailscaleAuthenticationTest {
 
     private fun host(error: String) = WidgetHost(program).apply {
         set("machine", Str("100.64.0.1"))
+        set("sshUser", Str("developer"))
         set("devices", Obj(mapOf("configured" to Bool(false), "syncing" to Bool(false), "items" to Lst(emptyList()))))
         set("work", Obj(mapOf("ok" to Bool(false), "err" to Str(error))))
     }
@@ -55,9 +57,8 @@ class TailscaleAuthenticationTest {
     }
 
     @Test fun discoveryErrorAlsoOffersApprovalActions() {
-        val h = host("")
+        val h = apiHost("Visit $approval\n")
         h.set("view", Str("machines"))
-        h.set("tailnet", Obj(mapOf("ok" to Bool(false), "err" to Str("Visit $approval\n"))))
         tap(h, "Copy link", screen = true)
         assertEquals(listOf("copy" to listOf(Str(approval))), h.actions)
     }
@@ -76,14 +77,13 @@ class TailscaleAuthenticationTest {
     @Test fun providerErrorWithoutStderrStillShowsFullDetails() {
         val h = host("")
         h.set("work", Obj(mapOf("ok" to Bool(true), "out" to Obj(mapOf(
-            "ok" to Bool(false), "host" to Str("100.64.0.1"), "user" to Str(""), "error" to Str("tmux is missing"),
+            "ok" to Bool(false), "host" to Str("100.64.0.1"), "user" to Str("developer"), "error" to Str("tmux is missing"),
         )))))
         tap(h, "Copy error details")
         assertEquals(listOf("copy" to listOf(Str("tmux is missing"))), h.actions)
     }
 
     private fun apiHost(error: String? = null) = host("").apply {
-        set("discovery", Str("old-user@old-discovery-laptop"))
         set("devices", Obj(mapOf(
             "configured" to Bool(true), "syncing" to Bool(false),
             "error" to (error?.let(::Str) ?: Null),
@@ -91,17 +91,17 @@ class TailscaleAuthenticationTest {
         )))
     }
 
-    @Test fun apiDiscoveryDoesNotConnectToTheSavedDiscoveryLaptop() {
+    @Test fun deviceDiscoveryHasNoSshOrGuestTailscaleSource() {
         val h = apiHost()
-        val source = program.globals.filterIsInstance<Global.Source>().first { it.name == "tailnet" }
-        val command = source.arg!!(Env.root(h)).toString()
-        assertFalse(command.contains("ssh"))
-        assertFalse(command.contains("old-discovery-laptop"))
+        assertEquals(setOf("devices", "work"), program.globals.filterIsInstance<Global.Source>().map { it.name }.toSet())
+        assertFalse(program.commands.any { it.contains("tailscale status") })
         h.set("view", Str("machines"))
         tap(h, "Server", screen = true)
+        assertEquals(Str("settings"), h.get("view"))
+        assertEquals(Str(""), h.get("login"))
         val work = program.globals.filterIsInstance<Global.Source>().first { it.name == "work" }
-        assertTrue(work.arg!!(Env.root(h)).toString().contains("100.64.0.2"))
-        assertFalse(work.arg!!(Env.root(h)).toString().contains("old-discovery-laptop"))
+        assertFalse(work.arg!!(Env.root(h)).toString().contains("ssh"))
+        assertFalse(work.arg!!(Env.root(h)).toString().contains("oma-ssh-sessions"))
     }
 
     @Test fun selectingApiDeviceKeepsItsPreviouslySavedSshUsername() {
@@ -132,18 +132,43 @@ class TailscaleAuthenticationTest {
         assertEquals(listOf("launcher" to listOf(Str("tailscale"))), unconfigured.actions)
     }
 
-    @Test fun existingSshDiscoveryRemainsAvailableWhenExplicitlySelected() {
+    @Test fun switchingToANewMachinePreservesTheOldUsernameWithoutInheritingIt() {
         val h = apiHost()
-        h.set("preferApi", Bool(false))
-        val source = program.globals.filterIsInstance<Global.Source>().first { it.name == "tailnet" }
-        assertTrue(source.arg!!(Env.root(h)).toString().contains("old-user@old-discovery-laptop"))
+        h.set("view", Str("machines"))
+        tap(h, "Server", screen = true)
+        assertEquals(Str(""), h.get("login"))
+        val (input, env) = elements(program.screen!!, Env.root(h)).first { (n, e) ->
+            n.kind == "Input" && n.props["text"]?.invoke(e) == Str("")
+        }
+        input.handlers.getValue("onSubmit").run(env, listOf(Str("mac-user")))
+        assertEquals(Str("mac-user"), h.get("login"))
+        h.set("machine", Str("100.64.0.1"))
+        assertEquals(Str("developer"), h.get("login"))
+        h.set("machine", Str("100.64.0.2"))
+        assertEquals(Str("mac-user"), h.get("login"))
     }
 
-    @Test fun waitingForNativeConfigurationDoesNotStartAnUnnecessarySshConnection() {
+    @Test fun missingUsernameCannotStartRootSessionsOrSignInChecks() {
+        val h = host("")
+        h.set("sshUser", Str(""))
+        val labels = elements(program.root, Env.root(h)).mapNotNull { (n, e) -> n.props["text"]?.invoke(e)?.toString() }
+        assertTrue(labels.contains("Set SSH user"))
+        assertFalse(labels.contains("New terminal"))
+        assertFalse(labels.contains("SSH sign-in"))
+        val source = program.globals.filterIsInstance<Global.Source>().first { it.name == "work" }
+        assertFalse(source.arg!!(Env.root(h)).toString().contains("oma-ssh-sessions"))
+    }
+
+    @Test fun newTerminalUsesTheMacAccountInsteadOfThePreviousLinuxUser() {
         val h = apiHost()
-        h.set("devices", Null)
-        val source = program.globals.filterIsInstance<Global.Source>().first { it.name == "tailnet" }
-        assertFalse(source.arg!!(Env.root(h)).toString().contains("ssh"))
+        h.set("accounts", Json.parse("""[{"host":"100.64.0.2","user":"mac-user"}]"""))
+        h.set("view", Str("machines"))
+        tap(h, "New terminal", screen = true)
+        val command = h.actions.first { it.first == "terminal" }.second.first().toString()
+        assertTrue(command.contains("mac-user"))
+        assertTrue(command.contains("100.64.0.2"))
+        assertFalse(command.contains("developer"))
+        assertFalse(command.contains("root"))
     }
 
     @Test fun sshErrorOffersNativeSignInForTheSelectedHostAndUser() {
@@ -157,6 +182,6 @@ class TailscaleAuthenticationTest {
         val h = host("")
         h.set("view", Str("settings"))
         tap(h, "SSH sign-in", screen = true)
-        assertEquals(listOf("sshAuth" to listOf(Str("100.64.0.1"), Str(""))), h.actions)
+        assertEquals(listOf("sshAuth" to listOf(Str("100.64.0.1"), Str("developer"))), h.actions)
     }
 }

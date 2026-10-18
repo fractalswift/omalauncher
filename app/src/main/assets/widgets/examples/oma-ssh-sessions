@@ -5,34 +5,37 @@ action=${1:-}
 host=${2:-}
 user=${3:-}
 [[ -n "$host" ]] || { printf 'Choose a machine first.\n' >&2; exit 2; }
+[[ -n "$user" ]] || { printf 'Set the SSH username for this machine in widget Settings.\n' >&2; exit 2; }
 options=(-o ConnectTimeout=8 -o ConnectionAttempts=1 -o ServerAliveInterval=30 -o ServerAliveCountMax=3)
 [[ -z "$user" ]] || options+=(-l "$user")
 remote_quote() { local value=${1//\'/\'\\\'\'}; printf "'%s'" "$value"; }
+# macOS noninteractive SSH shells may omit Homebrew, where tmux/python3 live.
+remote_path='export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; '
 case "$action" in
   shell)
     exec ssh -tt "${options[@]}" -- "$host"
     ;;
   new)
     # Automatic session numbers: no naming form, and no default remote command to exit accidentally.
-    exec ssh -tt "${options[@]}" -- "$host" 'exec tmux -u new-session'
+    exec ssh -tt "${options[@]}" -- "$host" "${remote_path}exec tmux -u new-session"
     ;;
   attach)
     id=${4:-}
     [[ "$id" =~ ^\$[0-9]+$ ]] || { printf 'Invalid session ID.\n' >&2; exit 2; }
     # The validated ID is quoted for the remote shell. Never create a replacement on attach failure.
-    exec ssh -tt "${options[@]}" -- "$host" "exec tmux -u attach-session -t '$id'"
+    exec ssh -tt "${options[@]}" -- "$host" "${remote_path}exec tmux -u attach-session -t '$id'"
     ;;
   end)
     id=${4:-}
     [[ "$id" =~ ^\$[0-9]+$ ]] || { printf 'Invalid session ID.\n' >&2; exit 2; }
-    if ssh -T -o BatchMode=yes "${options[@]}" -- "$host" "exec tmux kill-session -t '$id'" >/dev/null; then
+    if ssh -T -o BatchMode=yes "${options[@]}" -- "$host" "${remote_path}exec tmux kill-session -t '$id'" >/dev/null; then
       printf '{"ok":true}\n'
     else
       printf '{"ok":false,"error":"Could not end the session. Check SSH access and refresh."}\n'
     fi
     ;;
   list)
-    ssh -T -o BatchMode=yes "${options[@]}" -- "$host" "python3 - $(remote_quote "$host") $(remote_quote "$user")" <<'PY'
+    ssh -T -o BatchMode=yes "${options[@]}" -- "$host" "${remote_path}python3 - $(remote_quote "$host") $(remote_quote "$user")" <<'PY'
 import json
 import shutil
 import subprocess

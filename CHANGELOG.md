@@ -6,6 +6,9 @@ Dates are when the build was uploaded to Play.
 
 ## Unreleased (fork)
 
+- Simplify tmux widget discovery to the Tailscale API only. Prompt for each new
+  machine's SSH username instead of defaulting to the phone guest's root user;
+  preserve existing host-specific usernames and include Homebrew paths on macOS.
 - The tmux widget offers native SSH sign-in with live browser approval and copy
   buttons, keeping the authentication connection open without terminal selection
   or home-screen drag gestures.
