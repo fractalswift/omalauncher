@@ -13,6 +13,16 @@ Enter your Groq key, pick a model and optional language, and tap **save**. Leavi
 
 Language is automatic when empty, or a language code such as `en`. **Test microphone** records, **stop test** transcribes, and the result appears on the settings screen without executing a command.
 
+The replacement key field deliberately opens empty. The status above it distinguishes
+no saved key, a saved but unreadable key, a saved key not yet tested, a successful
+last transcription, and a last access denial (HTTP 401/403). An access denial or
+network failure never removes the key. Status describes the last transcription
+result, not a continuous validity check. Run **test microphone → stop test** to
+check again. Key saves verify the preferences disk write before reporting success.
+Normal in-place app updates and restarts preserve the encrypted key. If Android
+cannot decrypt it, the app reports that explicitly and preserves the ciphertext;
+it does not silently create a replacement encryption key during a read.
+
 ## Offline is optional, without downloads
 
 When Groq is selected, **use existing on-device speech when offline** permits an offline recognizer only if Android reports one already available. On API 33+, recognition support is checked against *installed* on-device languages. Missing models are reported, not downloaded; older versions attempt only the existing on-device recognizer and report unsupported languages. The code never calls a model-download API or installs a speech engine.

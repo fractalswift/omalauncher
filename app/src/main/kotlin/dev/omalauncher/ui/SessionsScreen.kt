@@ -249,6 +249,9 @@ internal fun DiscoveryDialog(runtime: Runtime, onDismiss: () -> Unit) {
             BasicText("Tailscale discovery", style = Mono.copy(fontSize = TextSize.Title))
             BasicText("Keep Tailscale connected on Android, with Omalauncher included in its VPN routing. Generate an API access token (tskey-api-), not a device auth key. Personal API tokens inherit your account's permissions; this app only reads the device list.", style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small))
             SessionField("Tailnet (- uses the token's tailnet)", tailnet) { tailnet = it }
+            BasicText(manager.discoveryCredentialStatus(), style = Mono.copy(color = Palette.accent))
+            manager.discoveryError?.let { BasicText(it, style = Mono.copy(color = Palette.red)) }
+            BasicText("The token box stays empty for privacy. Blank keeps the saved token. Saved tokens survive app updates and restarts; expiry or revoked access can still require a replacement.", style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small))
             SessionField(if (manager.discoveryConfigured) "API token (blank keeps saved token)" else "API access token", token, secret = true) { token = it }
             BracketAction("open Tailscale API keys", Palette.accent) {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://console.tailscale.com/admin/settings/keys")))
@@ -265,7 +268,10 @@ internal fun DiscoveryDialog(runtime: Runtime, onDismiss: () -> Unit) {
                         onDismiss()
                     } catch (e: Exception) { error = e.message }
                 }
-                if (manager.discoveryConfigured) BracketAction("remove token", Palette.red) { manager.clearDiscovery(); onDismiss() }
+                if (manager.discoveryConfigured) BracketAction("remove token", Palette.red) {
+                    try { manager.clearDiscovery(); onDismiss() }
+                    catch (_: Exception) { error = "Could not remove the saved token" }
+                }
             }
         }
     }

@@ -67,7 +67,8 @@ class Speech(private val context: Context) {
             DictationRoute.Unavailable -> { error = "No internet and no existing offline recognition available; no model will be installed" }
             DictationRoute.Groq -> {
                 cloud = true
-                if (settings.key().isBlank()) { error = "Add your Groq API key in Settings → Microphone"; return }
+                val key = try { settings.key() } catch (e: IllegalStateException) { error = e.message; return }
+                if (key.isBlank()) { error = "No Groq API key saved. Add one in Settings → Microphone"; return }
                 done = onDone
                 try {
                     val file = File.createTempFile("dictation-", ".m4a", context.cacheDir)
@@ -110,14 +111,17 @@ class Speech(private val context: Context) {
     fun letGo() { if (!cloud) android.letGo() }
 
     private fun upload(file: File) {
+        val key = try { settings.key() } catch (e: IllegalStateException) { error = e.message; return }
+        if (key.isBlank()) { error = "No Groq API key saved. Add one in Settings → Microphone"; return }
         processing = true
         val token = generation
-        val next = GroqSpeechRequest(settings.key(), settings.model, settings.language.substringBefore('-').lowercase())
+        val next = GroqSpeechRequest(key, settings.model, settings.language.substringBefore('-').lowercase())
         request = next
         job = scope.launch {
             try {
                 val transcript = withContext(Dispatchers.IO) { next.transcribe(file) }
                 if (token != generation) return@launch
+                if (runCatching { settings.key() == key }.getOrDefault(false)) settings.lastKeyResult = "accepted"
                 processing = false; cloudText = transcript
                 clip = null; file.delete(); request = null
                 val callback = done; done = null
@@ -126,6 +130,7 @@ class Speech(private val context: Context) {
                 // cancel() already cleared the destination and recording.
             } catch (e: Exception) {
                 if (token == generation) {
+                    if (e is GroqAuthenticationException && runCatching { settings.key() == key }.getOrDefault(false)) settings.lastKeyResult = "rejected"
                     processing = false; request = null
                     error = if (e is IllegalArgumentException) e.message else "${e.message?.takeIf { it.startsWith("Groq") } ?: "Could not reach Groq"}. Tap the microphone to retry; leaving this window discards the recording."
                 }

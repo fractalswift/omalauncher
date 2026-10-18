@@ -6,6 +6,10 @@ Dates are when the build was uploaded to Play.
 
 ## Unreleased (fork)
 
+- Show saved, unreadable and access-denied API credential states. Groq records
+  whether the saved key last succeeded or was denied, without erasing it on
+  network failures. Key saves check disk-write success; decryption never creates
+  a replacement encryption key. Empty replacement fields explicitly keep saved keys.
 - Simplify tmux widget discovery to the Tailscale API only. Prompt for each new
   machine's SSH username instead of defaulting to the phone guest's root user;
   preserve existing host-specific usernames and include Homebrew paths on macOS.

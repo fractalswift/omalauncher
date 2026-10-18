@@ -10,6 +10,8 @@ import java.util.UUID
 import java.util.concurrent.CancellationException
 import java.util.concurrent.atomic.AtomicBoolean
 
+class GroqAuthenticationException : IOException("Groq denied access to the saved API key (HTTP 401/403). Check the key and account permissions in Microphone settings; the saved key has not been removed.")
+
 /** A single cancellable recording upload. Fixed HTTPS endpoint; credentials never enter Linux. */
 class GroqSpeechRequest(
     private val key: String,
@@ -57,8 +59,8 @@ class GroqSpeechRequest(
             }
             checkCancelled()
             val status = http.responseCode
+            if (status == 401 || status == 403) throw GroqAuthenticationException()
             if (status !in 200..299) throw IOException(when (status) {
-                401, 403 -> "Groq rejected the API key; check Microphone settings"
                 429 -> "Groq rate limit reached; tap the microphone to retry"
                 else -> "Groq transcription failed (HTTP $status); tap the microphone to retry"
             })

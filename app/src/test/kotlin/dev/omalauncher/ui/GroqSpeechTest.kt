@@ -47,7 +47,7 @@ class GroqSpeechTest {
     @Test fun providerFailuresDoNotEchoCredentialsOrProviderBody() = recording { file ->
         val http = Connection(401, "sensitive provider detail and token")
         val failure = runCatching { GroqSpeechRequest("test-key", "whisper-large-v3", "") { http }.transcribe(file) }.exceptionOrNull()
-        assertTrue(failure is IOException)
+        assertTrue(failure is GroqAuthenticationException)
         assertTrue(failure!!.message!!.contains("API key"))
         assertFalse(failure.message!!.contains("sensitive"))
         assertFalse(failure.message!!.contains("test-key"))
@@ -60,6 +60,16 @@ class GroqSpeechTest {
         request.cancel()
         assertTrue(runCatching { request.transcribe(file) }.exceptionOrNull() is CancellationException)
         assertFalse(opened)
+    }
+    @Test fun onlyAccessDenialsAreClassifiedAsCredentialFailures() = recording { file ->
+        for (code in listOf(401, 403, 429, 500)) {
+            val http = Connection(code, "private server response")
+            val failure = runCatching { GroqSpeechRequest("test-key", "whisper-large-v3", "") { http }.transcribe(file) }.exceptionOrNull()
+            assertEquals("HTTP $code", code == 401 || code == 403, failure is GroqAuthenticationException)
+            assertFalse(failure!!.message!!.contains("private server response"))
+            assertTrue(file.exists())
+            assertTrue(http.disconnected)
+        }
     }
     @Test fun rejectsHeaderInjectionAndMalformedResponses() = recording { file ->
         assertTrue(runCatching { GroqSpeechRequest("key\r\nBad: injected", "whisper-large-v3", "").transcribe(file) }.exceptionOrNull() is IllegalArgumentException)

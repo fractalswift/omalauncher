@@ -250,6 +250,8 @@ class SessionManager(
         discoveryConfigured = credentials.configured
     }
 
+    fun discoveryCredentialStatus() = credentials.status()
+
     fun clearDiscovery() {
         credentials.clear()
         resetDiscoveryRequest()

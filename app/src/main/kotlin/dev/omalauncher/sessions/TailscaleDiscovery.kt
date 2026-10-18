@@ -19,7 +19,7 @@ object TailscaleDiscovery {
             val code = connection.responseCode
             check(code == 200) {
                 when (code) {
-                    401, 403 -> "Tailscale denied discovery. Check the API token, its device-read access, and tailnet."
+                    401, 403 -> "Tailscale denied discovery (HTTP $code). The token is still saved; check expiry, revocation, device-read access, and tailnet."
                     429 -> "Tailscale rate limit reached. Try again later."
                     else -> "Tailscale discovery failed (HTTP $code)"
                 }

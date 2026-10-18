@@ -43,6 +43,14 @@ operations on the selected destination. Keep its **SSH user** configured as befo
 Device discovery is API-only. The former discovery SSH host, guest Tailscale CLI
 and fallback toggle have been removed from this built-in widget.
 
+## Saved API token status
+
+The API settings show whether a token is saved or cannot be decrypted, and display
+the latest discovery error. The replacement token box deliberately stays empty;
+blank keeps the saved token. Updates and restarts preserve it. HTTP 401/403 errors
+explain that the token remains saved and may have expired, been revoked, or lack
+access. Network errors do not remove it. **Save & discover** checks access again.
+
 ## Connecting to a Mac
 
 Use the Mac's **short account name**, as printed by `whoami` in its Terminal,

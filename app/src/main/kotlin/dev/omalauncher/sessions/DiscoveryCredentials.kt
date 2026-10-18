@@ -18,10 +18,20 @@ internal class DiscoveryCredentials(context: Context) {
 
     fun token(): String {
         val encoded = prefs.getString("token", null) ?: return ""
-        val data = Base64.decode(encoded, Base64.NO_WRAP)
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, data.copyOfRange(0, 12)))
-        return cipher.doFinal(data.copyOfRange(12, data.size)).toString(Charsets.UTF_8)
+        return try {
+            val data = Base64.decode(encoded, Base64.NO_WRAP)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, key(create = false), GCMParameterSpec(128, data.copyOfRange(0, 12)))
+            cipher.doFinal(data.copyOfRange(12, data.size)).toString(Charsets.UTF_8)
+        } catch (_: Exception) {
+            throw IllegalStateException("Tailscale token is saved but Android cannot decrypt it. Unlock your phone and retry; if this persists, replace the token in discovery settings.")
+        }
+    }
+
+    fun status(): String = when {
+        !configured -> "No API token saved"
+        runCatching { token() }.isFailure -> "Token saved, but Android cannot decrypt it. Unlock your phone and retry; if this persists, replace the token."
+        else -> "API token saved on this device"
     }
 
     fun save(tailnet: String, token: String) {
@@ -31,14 +41,15 @@ internal class DiscoveryCredentials(context: Context) {
             cipher.init(Cipher.ENCRYPT_MODE, key())
             editor.putString("token", Base64.encodeToString(cipher.iv + cipher.doFinal(token.trim().toByteArray()), Base64.NO_WRAP))
         }
-        editor.apply()
+        check(editor.commit()) { "Tailscale token could not be saved on this device" }
     }
 
-    fun clear() { prefs.edit().clear().apply() }
+    fun clear() { check(prefs.edit().clear().commit()) { "Tailscale token could not be removed" } }
 
-    private fun key(): SecretKey {
+    private fun key(create: Boolean = true): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey(ALIAS, null) as? SecretKey)?.let { return it }
+        check(create) { "Saved encryption key unavailable" }
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
             init(KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())

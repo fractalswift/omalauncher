@@ -50,7 +50,7 @@ fun MicrophoneScreen(onDismiss: () -> Unit) {
     var language by remember { mutableStateOf(settings.language) }
     var fallback by remember { mutableStateOf(settings.fallback) }
     var key by remember { mutableStateOf("") }
-    var savedKey by remember { mutableStateOf(settings.key().isNotBlank()) }
+    var savedKey by remember { mutableStateOf(settings.hasSavedKey) }
     var message by remember { mutableStateOf("") }
     var transcript by remember { mutableStateOf("") }
     val onDevice = remember { Speech.onDeviceAvailable(context) }
@@ -82,9 +82,13 @@ fun MicrophoneScreen(onDismiss: () -> Unit) {
                 }
             }
             if (provider == DictationProvider.Groq) {
-                BasicText(if (savedKey) "Groq API key · saved on this device" else "Groq API key", style = Mono)
+                BasicText(settings.keyStatus(), style = Mono)
                 DictationField(key, "Enter key; leave empty to keep the saved key", password = true) { key = it }
-                if (savedKey) BracketAction("remove saved key", Palette.red) { speech.cancel(); settings.saveKey(""); savedKey = false; key = "" }
+                BasicText("The box stays empty for privacy. Save or test microphone to store a replacement. Saved keys survive app updates and restarts on this device.", style = Mono.copy(color = Palette.muted))
+                if (savedKey) BracketAction("remove saved key", Palette.red) {
+                    try { speech.cancel(); settings.saveKey(""); savedKey = false; key = ""; message = "Saved Groq key removed" }
+                    catch (_: Exception) { message = "Could not remove the saved key" }
+                }
                 BasicText("model", style = Mono.copy(color = Palette.accent))
                 DictationSettings.MODELS.forEach { choice ->
                     BracketAction((if (model == choice) "✓ " else "") + choice, Palette.accent) { model = choice }
