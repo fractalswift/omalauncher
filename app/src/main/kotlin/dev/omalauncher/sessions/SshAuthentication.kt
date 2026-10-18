@@ -101,11 +101,8 @@ class SshAuthentication(
             require(!machine.local) { "Choose a remote SSH machine" }
             require(machine.user.isNotBlank()) { "Set the SSH username for this machine first" }
             machine.validate()
-            val user = machine.user.takeIf { it.isNotEmpty() }?.let { " -l ${shellQuote(it)}" }.orEmpty()
-            // No terminal or tmux session is created, and no API credentials are involved.
-            return "exec timeout 180 ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes" +
-                " -o ConnectTimeout=10 -o ConnectionAttempts=1 -o ServerAliveInterval=15 -o ServerAliveCountMax=3" +
-                " -p ${machine.port}$user -- ${shellQuote(machine.host)} true"
+            require(machine.port == 22) { "Widget SSH sign-in uses port 22" }
+            return "exec timeout 180 bash ~/.config/omalauncher/widgets/examples/oma-ssh-sessions check ${shellQuote(machine.host)} ${shellQuote(machine.user)}"
         }
     }
 }

@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import dev.omalauncher.Runtime
 import dev.omalauncher.sessions.SshAuthentication
+import dev.omalauncher.linux.shellQuote
 
 @Composable
 fun SshAuthenticationScreen(runtime: Runtime, onDismiss: () -> Unit) {
@@ -47,6 +48,12 @@ fun SshAuthenticationScreen(runtime: Runtime, onDismiss: () -> Unit) {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             BasicText(target?.let { "${it.user.ifBlank { "SSH config user" }}@${it.host}" } ?: "Choose a machine in the SSH sessions widget first.", style = Mono)
             BasicText("This checks SSH access without creating a terminal session. If Tailscale requests approval, use the buttons here. Leave this screen open while approving in your browser, then return.", style = Mono.copy(color = Palette.muted))
+            BasicText("For password-based computers such as a Mac, enable automatic SSH once. The app creates a private key on this phone and installs its public key on the selected computer. Enter the computer's password in the terminal prompt; it is not saved. Future previews and terminals use the key automatically, including after app updates and restarts.", style = Mono.copy(color = Palette.muted))
+            if (target != null) BracketAction("enable automatic SSH", Palette.accent) {
+                check.cancel()
+                onDismiss()
+                runtime.terminal("bash ~/.config/omalauncher/widgets/examples/oma-ssh-sessions setup ${shellQuote(target.host)} ${shellQuote(target.user)}; printf '\\nPress Enter to close'; read -r _", "SSH setup · ${target.host}")
+            }
             BasicText(when {
                 check.succeeded -> "SSH sign-in completed. Return to the widget and tap Retry or refresh."
                 check.running && check.approvalUrl != null -> "Waiting for Tailscale approval…"

@@ -3,7 +3,7 @@ widget "SSH sessions" {
   order: 3
   size: 6x4
   minSize: 3x3
-  meta { description: "Choose any Tailscale machine, resume its terminals with live previews, start new ones, or end a workspace with its close button"; version: "2.6"; license: "MIT"; category: "dev"; owl: 6 }
+  meta { description: "Choose any Tailscale machine, resume its terminals with live previews, start new ones, or end a workspace with its close button"; version: "2.7"; license: "MIT"; category: "dev"; owl: 6 }
   requires { pacman: ["openssh"] }
 
   state sshUser = "" persist
@@ -65,6 +65,9 @@ widget "SSH sessions" {
       } else if !work.ok || !work.out.ok {
         Text { text: "Could not load sessions"; color: yellow }
         Text { text: workError; style: small; color: muted; maxLines: 3 }
+        if match(workError, "Permission denied") != null {
+          Text { text: "Background refresh cannot ask for a password. Open SSH sign-in → enable automatic SSH once for this computer."; style: small; color: muted; maxLines: 4 }
+        }
         Button { text: "SSH sign-in"; onTap: sshAuth(machine, login) }
         ErrorActions { message: workError }
         Button { text: "Retry"; onTap: refresh() }

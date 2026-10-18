@@ -836,7 +836,8 @@ class WidgetEngine(
                     setOf("63d91ba9fd634736569f859a191b72466c713f5859a0d891748272d7f68d44a1",
                         "831cf765e145934a83fb43fd80c1b7b5c80b6340235f021550ee99d44c9f1f1b",
                         "de1ddaa55a531bfa7d3452d2d3a6f80f2123c13a32ad2c36d8060ab2f292855d",
-                        "6c9360dd626da363f9372a1d68fffcc466c92d32a72cf443a94a467d7ba77d20")
+                        "6c9360dd626da363f9372a1d68fffcc466c92d32a72cf443a94a467d7ba77d20",
+                        "beba60806178b01f98f6eb13df3ebee2a0cd56205d510eebf053bd6d5e39c636")
                 val pristine = legacy || current.contentEquals(assets.open("widgets/examples/65-tailscale.owl").use { it.readBytes() })
                 add(asset("widgets/examples/65-tailscale.owl", sshWidget, if (pristine) Policy.Owned else Policy.Seeded))
             }

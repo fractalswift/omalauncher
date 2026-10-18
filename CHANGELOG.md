@@ -6,6 +6,9 @@ Dates are when the build was uploaded to Play.
 
 ## Unreleased (fork)
 
+- Add one-time automatic SSH setup: generate a phone-specific key, install its
+  public key through a password prompt, and verify unattended access. Share
+  authenticated connections between widget refreshes and terminals.
 - Show saved, unreadable and access-denied API credential states. Groq records
   whether the saved key last succeeded or was denied, without erasing it on
   network failures. Key saves check disk-write success; decryption never creates

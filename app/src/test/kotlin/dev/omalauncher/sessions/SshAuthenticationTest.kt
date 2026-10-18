@@ -63,12 +63,11 @@ class SshAuthenticationTest {
         } finally { check.cancel(); task.join() }
     }
 
-    @Test fun commandChecksAccessWithoutCreatingTmuxSessionsOrDisablingHostVerification() {
+    @Test fun commandUsesTheSameHelperAndAccountAsTheWidget() {
         val command = SshAuthentication.command(Machine(name = "Server", host = "100.64.0.2", user = "developer"))
-        assertTrue(command.startsWith("exec timeout 180 ssh -T"))
-        assertTrue(command.contains("StrictHostKeyChecking=yes"))
-        assertTrue(command.contains("-l 'developer'"))
-        assertTrue(command.endsWith("-- '100.64.0.2' true"))
+        assertTrue(command.startsWith("exec timeout 180 bash"))
+        assertTrue(command.contains("oma-ssh-sessions check"))
+        assertTrue(command.endsWith("check '100.64.0.2' 'developer'"))
         assertFalse(command.contains("tmux"))
         assertTrue(runCatching { SshAuthentication.command(Machine.PHONE) }.isFailure)
         assertTrue(runCatching { SshAuthentication.command(Machine(name = "Mac", host = "100.64.0.2")) }.isFailure)

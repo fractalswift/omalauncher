@@ -63,6 +63,23 @@ noninteractive SSH commands. Each host keeps its own SSH username. The active
 
 ## SSH sign-in
 
+For a Mac or another computer using ordinary password-based SSH, open
+**SSH sign-in → enable automatic SSH** once. The app creates a phone-specific
+Ed25519 key under `~/.ssh/omalauncher/` in the app-private Linux environment,
+installs only its public key using `ssh-copy-id`, and verifies noninteractive
+access. Enter the destination account password in the terminal when requested;
+it is not saved. Existing SSH keys are preserved. Repeat for each destination
+you want to authorize, using the same phone key. This persists across app updates
+and restarts. Installation requires the destination to allow public-key access.
+
+Terminals, session previews and sign-in checks also share authenticated SSH
+connections for the same user/host. The connection remains available for ten
+minutes after its last client exits. A terminal opened before this update is
+not retroactively shared; reconnect once or use automatic setup. An existing
+password-authenticated terminal can work while a separate background request
+fails: background polling cannot prompt for a password. Tailscale-managed SSH
+still follows the tailnet's approval policy.
+
 If Tailscale requests an additional SSH authentication check, the error panel
 offers **Open authentication** and **Copy link**. Complete the check in the
 browser, return to the widget and tap retry/refresh. **Copy error details**
