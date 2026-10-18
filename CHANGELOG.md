@@ -6,6 +6,37 @@ Dates are when the build was uploaded to Play.
 
 ## Unreleased (fork)
 
+- Add one-time automatic SSH setup: generate a phone-specific key, install its
+  public key through a password prompt, and verify unattended access. Share
+  authenticated connections between widget refreshes and terminals.
+- Show saved, unreadable and access-denied API credential states. Groq records
+  whether the saved key last succeeded or was denied, without erasing it on
+  network failures. Key saves check disk-write success; decryption never creates
+  a replacement encryption key. Empty replacement fields explicitly keep saved keys.
+- Simplify tmux widget discovery to the Tailscale API only. Prompt for each new
+  machine's SSH username instead of defaulting to the phone guest's root user;
+  preserve existing host-specific usernames and include Homebrew paths on macOS.
+- The tmux widget offers native SSH sign-in with live browser approval and copy
+  buttons, keeping the authentication connection open without terminal selection
+  or home-screen drag gestures.
+- Tailscale SSH widget can discover devices directly via the launcher's encrypted
+  API configuration, with cached lists, throttled refresh and in-widget setup.
+  Existing SSH-based discovery remains as a fallback; tmux sessions are unchanged.
+- SSH widget errors offer Open authentication and Copy link for Tailscale SSH
+  approval URLs, plus Copy error details. Untouched built-in copies update in
+  place while preserving saved hosts and usernames.
+- Built-in Tailscale SSH sessions is searchable by Tailscale, SSH or tmux and
+  appears first in the built-in section, including the dev category.
+- Add widget includes a built-in Tailscale SSH sessions tile with remote tmux
+  previews and tap-to-resume. Fresh installs start with empty settings; existing
+  personalized SSH session widgets are recognized and preserved.
+- Microphone settings supports Groq transcription with encrypted key storage and
+  optional existing-model Android offline fallback.
+- Machines & Sessions manages local and SSH foot windows with stable identities,
+  optional tmux persistence, explicit resume/new/end actions, a recent-sessions
+  widget, and cached Tailscale API discovery using an Android-encrypted token.
+- Dictation selects installed on-device language models, gives the recognizer
+  time to reconnect on fallback, and retries one startup client/disconnection error.
 - A separate image button in the terminal helper panel attaches the latest
   Android screenshot to local OpenCode 2 prompts, preserving the text clipboard.
 - OpenCode installs and system updates prepare Node.js for OpenCode 2's npm-based

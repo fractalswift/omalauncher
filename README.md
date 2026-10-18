@@ -39,8 +39,7 @@ narrows the list, and Enter opens the highlighted app or sends the text to the
 agent. Short queries that name an app open it, sentences go to the agent; Tab
 and the arrow keys move the highlight. Tap the agent's name to pick another
 installed one; the choice is saved in `~/.config/omalauncher/agent`. Hold the mic to talk and release to send, or tap it to dictate
-into the field. Speech is recognized by Android (on the device when the phone
-supports it), so only text reaches Linux.
+into the field. Settings › microphone selects Android speech (the default) or Groq Whisper with your own key. Only text reaches Linux.
 
 Touch input in Linux windows: tap is a left click, long press is a right
 click, drag scrolls; apps with touch support (foot, GTK) get real touch.
@@ -50,8 +49,7 @@ and Super+W (close) in Linux windows.
 
 The terminal's helper-key panel has a microphone button: tap to dictate, then
 tap again to finish and insert the transcript without pressing Enter. It uses
-Android speech recognition, preferring on-device recognition when available.
-Leaving the window cancels dictation.
+the same microphone settings as the prompt bar. An optional offline fallback uses only an existing on-device recognizer/model: nothing is downloaded or installed. Without one, offline dictation is unavailable. Leaving the window cancels recording or transcription.
 
 The image button below the microphone attaches the **latest Android screenshot**
 to a local agent prompt. Grant photo access on first use, then reopen the keyboard
@@ -62,6 +60,50 @@ converts that paste into an `[Image 1]` attachment. It does not press Enter.
 The separate **paste** key still pastes your clipboard, which the image button
 does not replace. This has been verified with local OpenCode 2 in foot; an agent
 running over SSH needs the image transferred to that remote machine first.
+
+### Machines & Sessions
+
+Open **Settings → machines & sessions** to manage local terminals and SSH
+workspaces. **This phone** opens Linux directly; saved remote machines use normal
+SSH through Android's existing network/VPN. Multiple sessions on one machine get
+separate foot windows and Android Recents cards.
+
+For automatic Tailscale discovery:
+
+1. Keep the **Tailscale Android app** connected, with Omalauncher included in its
+   VPN routing. No second Tailscale installation is needed inside Linux.
+2. In [Tailscale's Keys settings](https://console.tailscale.com/admin/settings/keys),
+   generate an **API access token** (`tskey-api-`, not an auth key).
+3. Tap **tailscale**, leave Tailnet as `-`, paste the token, and **save & discover**.
+   Use **sync machines** later to update the cached device list. The token is
+   encrypted with Android Keystore and never passed to Linux or widget sources.
+   Replace it when it expires. Personal API tokens inherit the account's
+   permissions; this integration only calls the device-list endpoint.
+4. **Edit** a discovered machine to set its SSH username, then tap **+** for a new
+   named session. Discovery supplies addresses, not SSH credentials or access.
+
+Manual hosts and SSH config aliases are also supported. Addresses default to
+Tailscale IPs to avoid depending on guest MagicDNS. SSH keys, aliases and known
+hosts live in the guest's `~/.ssh`; first-time host verification and authentication
+happen in foot. Install `openssh` and `tmux` locally using **local SSH / tmux setup**
+if needed, and install tmux on each destination used for persistent sessions.
+
+Persistent sessions run in named tmux sessions. **Open** focuses an existing
+window; **Resume** attaches to its running session without rerunning the initial
+command. Closing/detaching a terminal leaves tmux running. **New session** creates
+an independent workspace; **end session** terminates its programs, whereas
+**forget saved entry** only removes the shortcut. An ended session is never
+silently recreated: **start again** is explicit. Plain SSH is available by turning
+off tmux persistence when creating a session.
+
+Remote tmux sessions survive phone disconnections, but normally not a destination
+reboot. Local tmux runs separately from foot and survives closing its window, but
+cannot survive Android killing the whole app/Linux environment. **Refresh** checks
+saved sessions without prompting for SSH authentication; unreachable means state
+unknown, not that the session ended.
+
+Tap **add widget** for a home-screen entry point with three recent sessions and a
+link back to all machines. The widget is also shipped as `examples/84-sessions.owl`.
 
 ## Building
 
@@ -85,6 +127,8 @@ the release app, with separate data and Linux setup. You can launch guest comman
 - [app/src/main/assets/widgets/README.md](app/src/main/assets/widgets/README.md):
   the widget language
 - [docs/TAILSCALE.md](docs/TAILSCALE.md): the live SSH/tmux session list with terminal previews and one-tap resumption
+- [docs/MICROPHONE.md](docs/MICROPHONE.md): Groq credentials, recording, optional offline recognition and testing
+- [docs/TAILSCALE_SSH_WIDGET.md](docs/TAILSCALE_SSH_WIDGET.md): built-in tmux session widget, discovery and setup on another phone
 
 ## Layout
 

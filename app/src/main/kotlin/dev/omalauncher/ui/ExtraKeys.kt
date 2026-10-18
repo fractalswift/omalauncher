@@ -272,6 +272,9 @@ private fun DictationKey(bridge: KeyboardBridge, modifier: Modifier) {
             speech.error = null
         }
     }
+    LaunchedEffect(speech.processing) {
+        if (speech.processing) Toast.makeText(context, "Transcribing with Groq… Tap the microphone to cancel.", Toast.LENGTH_SHORT).show()
+    }
     DisposableEffect(speech, view) {
         val observer = view.viewTreeObserver
         val listener = ViewTreeObserver.OnWindowFocusChangeListener { focused ->
@@ -286,9 +289,11 @@ private fun DictationKey(bridge: KeyboardBridge, modifier: Modifier) {
 
     KeyCap(
         modifier
-            .semantics { contentDescription = if (speech.listening) "Stop dictation" else "Start dictation" }
+            .semantics { contentDescription = when { speech.processing -> "Cancel transcription"; speech.listening -> "Stop dictation"; else -> "Start dictation" } }
             .clickable {
-                if (speech.listening) {
+                if (speech.processing) {
+                    speech.cancel()
+                } else if (speech.listening) {
                     speech.stop()
                 } else {
                     target = bridge.dictationTarget
@@ -299,9 +304,9 @@ private fun DictationKey(bridge: KeyboardBridge, modifier: Modifier) {
                     }
                 }
             },
-        fill = if (speech.listening) Palette.accent else Palette.surface,
+        fill = if (speech.listening || speech.processing) Palette.accent else Palette.surface,
     ) {
-        MicIcon(if (speech.listening) Palette.background else Palette.foreground)
+        MicIcon(if (speech.listening || speech.processing) Palette.background else Palette.foreground)
     }
 }
 

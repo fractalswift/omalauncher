@@ -28,7 +28,7 @@ class TailscaleWidgetTest {
     private fun host() = WidgetHost(program).apply {
         set("machine", Str("100.64.0.1")); set("machineName", Str("Laptop")); set("sshUser", Str("developer"))
         set("work", Json.parse("""{"ok":true,"out":{"ok":true,"host":"100.64.0.1","user":"developer","sessions":[{"id":"${'$'}17","name":"17","command":"opencode2","folder":"project","preview":"Explain this function","attached":0,"windows":1}]}}"""))
-        set("tailnet", Json.parse("""{"ok":true,"out":{"BackendState":"Running","Self":{"ID":"self","HostName":"Laptop","Online":true,"TailscaleIPs":["100.64.0.1"]},"Peer":{"a":{"ID":"a","HostName":"Other","Online":true,"TailscaleIPs":["100.64.0.2"]},"b":{"ID":"b","Online":false,"TailscaleIPs":["100.64.0.3"]},"c":{"ID":"c","Online":true,"Expired":true,"TailscaleIPs":["100.64.0.4"]}}}}"""))
+        set("devices", Json.parse("""{"configured":true,"syncing":false,"items":[{"id":"self","name":"Laptop","host":"100.64.0.1"},{"id":"a","name":"Other","host":"100.64.0.2"}]}"""))
     }
 
     private fun elements(nodes: List<WNode>, env: Env): List<Pair<WNode.Element, Env>> = nodes.flatMap { node ->
@@ -84,12 +84,13 @@ class TailscaleWidgetTest {
         assertTrue(text(h).contains("No running terminals"))
     }
     @Test fun machineSelectorUsesTailnetIpAndRefreshesSessionList() {
-        val h = host(); h.set("discovery", Str("user@discovery")); h.set("view", Str("machines"))
-        assertEquals(2, (h.get("online") as Lst).items.size)
+        val h = host(); h.set("view", Str("machines"))
+        assertEquals(2, (h.get("machines") as Lst).items.size)
         val (button, env) = elements(program.screen!!, Env.root(h)).first { (n, e) -> n.kind == "Button" && n.props["text"]?.invoke(e)?.toString() == "Other" }
         button.handlers.getValue("onTap").run(env, emptyList())
         assertEquals(Str("100.64.0.2"), h.get("machine")); assertEquals(Str("Other"), h.get("machineName"))
-        assertEquals(Str("sessions"), h.get("view")); assertEquals("refresh", h.actions.single().first)
+        assertEquals(Str("settings"), h.get("view")); assertEquals("refresh", h.actions.single().first)
+        assertEquals(Str(""), h.get("login"))
     }
     @Test fun shellArgumentsStayDataIncludingDollarSessionIdsAndQuotes() {
         val h = host(); val machine = "host'; printf INJECTED; #"; val user = "user'; printf INJECTED; #"
@@ -135,7 +136,7 @@ class TailscaleWidgetTest {
         assertTrue(text(h).contains("Loading sessions…"))
     }
     @Test fun settingsKeepUsernamesPerMachineWithoutBreakingTheOriginalHost() {
-        val h = host(); h.set("machine", Str("100.64.0.2")); h.set("view", Str("settings"))
+        val h = host(); h.set("accounts", Json.parse("""[{"host":"100.64.0.1","user":"developer"}]""")); h.set("machine", Str("100.64.0.2")); h.set("view", Str("settings"))
         val (input, env) = elements(program.screen!!, Env.root(h)).first { (n, _) -> n.kind == "Input" && "onSubmit" in n.handlers && n.props["text"]?.invoke(Env.root(h)) == Str("developer") }
         input.handlers.getValue("onSubmit").run(env, listOf(Str("other-login")))
         assertEquals(Str("other-login"), h.get("login"))
@@ -145,7 +146,7 @@ class TailscaleWidgetTest {
         assertEquals(Str("other-login"), h.get("login"))
     }
     @Test fun machineTabNewTerminalSelectsItsHostAndCreatesATrackedSession() {
-        val h = host(); h.set("discovery", Str("user@discovery")); h.set("view", Str("machines"))
+        val h = host(); h.set("view", Str("machines"))
         h.set("accounts", Json.parse("""[{"host":"100.64.0.2","user":"other-login"}]"""))
         val rendered = elements(program.screen!!, Env.root(h))
         assertFalse(rendered.any { (n, e) -> n.props["text"]?.invoke(e)?.toString() == "SSH" })

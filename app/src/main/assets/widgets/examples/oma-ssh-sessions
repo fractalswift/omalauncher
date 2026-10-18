@@ -5,34 +5,68 @@ action=${1:-}
 host=${2:-}
 user=${3:-}
 [[ -n "$host" ]] || { printf 'Choose a machine first.\n' >&2; exit 2; }
+[[ -n "$user" ]] || { printf 'Set the SSH username for this machine in widget Settings.\n' >&2; exit 2; }
 options=(-o ConnectTimeout=8 -o ConnectionAttempts=1 -o ServerAliveInterval=30 -o ServerAliveCountMax=3)
 [[ -z "$user" ]] || options+=(-l "$user")
+umask 077
+ssh_dir="$HOME/.ssh/omalauncher"
+mkdir -p "$ssh_dir"
+chmod 700 "$ssh_dir"
+# Share authenticated connections across terminals, previews and approval checks.
+# Keep sockets short: Android's translated home path can exceed UNIX socket limits.
+control_dir="${TMPDIR:-/tmp}/oc"
+mkdir -p "$control_dir"
+chmod 700 "$control_dir"
+options+=(-o ControlMaster=auto -o "ControlPath=$control_dir/%C" -o ControlPersist=600)
+identity="$ssh_dir/id_ed25519"
+[[ ! -f "$identity" ]] || options+=(-i "$identity")
 remote_quote() { local value=${1//\'/\'\\\'\'}; printf "'%s'" "$value"; }
+# macOS noninteractive SSH shells may omit Homebrew, where tmux/python3 live.
+remote_path='export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; '
 case "$action" in
+  setup)
+    # The user starts this once from the sign-in screen. Never store the password.
+    mkdir "$ssh_dir/setup.lock" 2>/dev/null || { printf 'SSH setup is already running.\n' >&2; exit 2; }
+    trap 'rmdir "$ssh_dir/setup.lock"' EXIT
+    if [[ ! -f "$identity" ]]; then
+      ssh-keygen -q -t ed25519 -N '' -C 'Omalauncher phone' -f "$identity"
+    fi
+    if [[ ! -f "$identity.pub" ]]; then
+      ssh-keygen -y -P '' -f "$identity" > "$identity.pub"
+    fi
+    printf 'Enable automatic SSH for %s@%s.\nEnter this computer’s password if requested. It will not be saved.\n' "$user" "$host"
+    # Do not reuse a master for installation: verify this new key independently.
+    ssh-copy-id -i "$identity.pub" -o ControlMaster=no -o ControlPath=none -o ConnectTimeout=8 -- "$user@$host"
+    ssh -T -o BatchMode=yes -o ControlMaster=no -o ControlPath=none -o IdentitiesOnly=yes -i "$identity" -l "$user" -- "$host" true
+    printf '\nAutomatic SSH is ready. Return to the widget and refresh.\n'
+    ;;
+  check)
+    exec ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes "${options[@]}" -- "$host" true
+    ;;
   shell)
     exec ssh -tt "${options[@]}" -- "$host"
     ;;
   new)
     # Automatic session numbers: no naming form, and no default remote command to exit accidentally.
-    exec ssh -tt "${options[@]}" -- "$host" 'exec tmux -u new-session'
+    exec ssh -tt "${options[@]}" -- "$host" "${remote_path}exec tmux -u new-session"
     ;;
   attach)
     id=${4:-}
     [[ "$id" =~ ^\$[0-9]+$ ]] || { printf 'Invalid session ID.\n' >&2; exit 2; }
     # The validated ID is quoted for the remote shell. Never create a replacement on attach failure.
-    exec ssh -tt "${options[@]}" -- "$host" "exec tmux -u attach-session -t '$id'"
+    exec ssh -tt "${options[@]}" -- "$host" "${remote_path}exec tmux -u attach-session -t '$id'"
     ;;
   end)
     id=${4:-}
     [[ "$id" =~ ^\$[0-9]+$ ]] || { printf 'Invalid session ID.\n' >&2; exit 2; }
-    if ssh -T -o BatchMode=yes "${options[@]}" -- "$host" "exec tmux kill-session -t '$id'" >/dev/null; then
+    if ssh -T -o BatchMode=yes "${options[@]}" -- "$host" "${remote_path}exec tmux kill-session -t '$id'" >/dev/null; then
       printf '{"ok":true}\n'
     else
       printf '{"ok":false,"error":"Could not end the session. Check SSH access and refresh."}\n'
     fi
     ;;
   list)
-    ssh -T -o BatchMode=yes "${options[@]}" -- "$host" "python3 - $(remote_quote "$host") $(remote_quote "$user")" <<'PY'
+    ssh -T -o BatchMode=yes "${options[@]}" -- "$host" "${remote_path}python3 - $(remote_quote "$host") $(remote_quote "$user")" <<'PY'
 import json
 import shutil
 import subprocess
@@ -79,5 +113,5 @@ result.update(host=sys.argv[1], user=sys.argv[2])
 print(json.dumps(result))
 PY
     ;;
-  *) printf 'Usage: oma-ssh-sessions list|new|attach|end|shell HOST USER [SESSION_ID]\n' >&2; exit 2 ;;
+  *) printf 'Usage: oma-ssh-sessions list|new|attach|end|shell|check|setup HOST USER [SESSION_ID]\n' >&2; exit 2 ;;
 esac

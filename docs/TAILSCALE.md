@@ -13,19 +13,23 @@ cp ~/.config/omalauncher/widgets/examples/65-tailscale.owl ~/.config/omalauncher
 owl-check ~/.config/omalauncher/widgets/65-tailscale.owl
 ```
 
-On an older launcher build, transfer **both files**: the `.owl` file into `~/.config/omalauncher/widgets/` and the helper into `~/.config/omalauncher/widgets/examples/`. The helper is invoked through Bash and needs no executable bit. A widget import link alone does not install the helper.
+This widget requires this fork's native API discovery and SSH sign-in support.
+Install the fork APK, then use **browse store → widgets → all → built in →
+Tailscale SSH sessions**. The helper is invoked through Bash and needs no
+executable bit. A widget import link alone does not install the helper or add the
+required native functionality to an older launcher.
 
-The phone needs `openssh`, declared by the widget. Each destination needs **tmux and python3**. Tailscale's Android VPN must include the launcher. No Tailscale API key or extra daemon inside proot is required.
+The phone needs `openssh`, declared by the widget. Each destination needs **tmux and python3**. Tailscale's Android VPN must include the launcher. Device discovery uses a Tailscale API token saved on Android; no extra daemon inside proot is required. See [current setup and authentication instructions](TAILSCALE_SSH_WIDGET.md).
 
 ## Configure once
 
 Open the widget, then **Settings**:
 
 - **Selected machine IP or SSH alias:** the laptop's Tailscale IP. Numeric IPs avoid MagicDNS problems inside proot.
-- **SSH user for this machine:** the remote account, or blank to use `~/.ssh/config`. Overrides are saved per destination, so changing another node's username does not change your laptop login.
-- **Discovery SSH host:** a destination such as `user@100.x.y.z` whose `tailscale status --json` supplies the **Machines** tab. Leave it blank only with a working local Tailscale daemon.
+- **SSH username for this machine:** the remote account, required explicitly. Usernames are saved per destination, so changing another node's username does not change your laptop login.
+- **Tailscale API discovery:** configure the token in the native dialog. The phone fetches devices directly; no discovery laptop or SSH fallback is used.
 
-Press Enter to save each field. Set the corresponding states with `owl-send` if configuring from a script: `machine`, `machineName`, `sshUser`, `discovery`. Use the actual installed filename, e.g. `65-tailnet-ssh.owl`.
+Press Enter to save each field. Use the actual installed filename if configuring states with `owl-send`. API tokens must be configured through native settings, never widget state.
 
 First-time host verification and Tailscale SSH approval still apply. Authorize the destination interactively before expecting background listing to work. Polling uses `BatchMode=yes`; it cannot repeatedly ask for a password. SSH keys/agent or authorized Tailscale SSH access are required. The widget never disables host-key checks.
 
@@ -36,9 +40,9 @@ First-time host verification and Tailscale SSH approval still apply. Authorize t
 3. Return home, detach, close the phone terminal, or disconnect from the network.
 4. Tap the session's card to return to the same running shell/agent and scrollback.
 
-The home tile and its expanded view show the same list. **Machines**, directly on the home tile, lists the online nodes visible to your discovery host. Tap a machine's name to view its sessions, or **New terminal** beside it to create a persistent tmux workspace immediately. Creating one also selects that machine and switches the widget to **Sessions**, so the new workspace appears when you return from Foot. All normal new-terminal buttons use the same persistent creation path.
+The home tile and its expanded view show the same list. **Machines**, directly on the home tile, lists devices returned by the API; last-seen status does not guarantee reachability. A new machine asks for its SSH username first. Tap a configured machine's name to view its sessions, or **New terminal** beside it to create a persistent tmux workspace immediately. Creating one also selects that machine and switches the widget to **Sessions**, so the new workspace appears when you return from Foot. All normal new-terminal buttons use the same persistent creation path.
 
-For ordinary SSH servers without tmux/Python, select the machine and use **Settings → Temporary SSH (not saved)**. That explicitly temporary connection is not included in the persistent-session list. SSH authentication, access rules and a working SSH server are still required; the selected SSH user can be changed in Settings, or left blank for per-host OpenSSH configuration.
+For ordinary SSH servers without tmux/Python, select the machine and use **Settings → Temporary SSH (not saved)**. That explicitly temporary connection is not included in the persistent-session list. SSH authentication, access rules and a working SSH server are still required; set an explicit username in Settings. **SSH sign-in → enable automatic SSH** handles one-time phone-key setup for password-based computers.
 
 Each running session has an **×** button. It ends that entire tmux session and the programs running in it, on the selected machine, then refreshes the list. It is not merely a client disconnect. Other sessions are unaffected. A failed end request is shown in the widget. Return Home instead of pressing × when you want to keep work running.
 

@@ -133,7 +133,7 @@ class Compiler private constructor(
         private val TRIGGER_PARAMS = mapOf("on" to listOf("value", "old"))
 
         /** Data only Android has; battery, media, notifications, volume, alarm and modes update as they change, device is fixed, system and apps are polled. */
-        val ANDROID = setOf("battery", "device", "media", "notifications", "volume", "system", "alarm", "modes", "apps")
+        val ANDROID = setOf("battery", "device", "media", "notifications", "volume", "system", "alarm", "modes", "apps", "sessions", "tailscale")
 
         /** media("...") commands. */
         val MEDIA = setOf("toggle", "play", "pause", "next", "previous", "open")

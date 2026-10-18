@@ -130,6 +130,23 @@ class Runtime(
     /** Its jobs write files and start the guest; one that fails (storage full) mustn't take the home screen down. */
     private val scope =
         CoroutineScope(SupervisorJob() + Dispatchers.Main + CoroutineExceptionHandler { _, e -> Log.e(TAG, "background job failed", e) })
+    val sessions by lazy { dev.omalauncher.sessions.SessionManager(context, this, scope) }
+    private var localSessionServerStarted = false
+
+    /** A separate proot owns tmux, so --kill-on-exit on a foot process cannot kill its sessions. */
+    fun ensureLocalSessionServer() {
+        if (localSessionServerStarted || !linux) return
+        localSessionServerStarted = true
+        scope.launch {
+            try {
+                val command = withContext(Dispatchers.IO) { dev.omalauncher.sessions.LocalTmux.serverCommand(proot) }
+                launch(command) { scope.launch { localSessionServerStarted = false } }
+            } catch (e: Exception) {
+                localSessionServerStarted = false
+                sessions.message = e.message ?: "Could not start local tmux"
+            }
+        }
+    }
     private var started = false
     private var prepared = false
 
@@ -554,6 +571,21 @@ class Runtime(
             } ?: return false
         // The task may have gone since it was listed.
         return runCatching { task.moveToFront() }.isSuccess
+    }
+
+    fun focusSessionWindow(appId: String): Boolean =
+        wm.appWindows.firstOrNull { it.appId == appId }?.let(::bringToFront) == true
+
+    fun closeSessionWindow(appId: String) {
+        wm.appWindows.firstOrNull { it.appId == appId }?.let(wm::close)
+    }
+
+    /** Session IDs, unlike display names, uniquely identify a terminal across reconnects. */
+    fun sessionTerminal(appId: String, name: String, command: String, onExit: () -> Unit) {
+        launchedNames[appId] = name
+        launch("foot --app-id=${shellQuote(appId)}${terminalFont.optionFor(appId, command)} -e bash -c ${shellQuote(command)}") {
+            scope.launch { onExit() }
+        }
     }
 
     /** The name to show for a Linux window: launch name, then .desktop entry, then its title. */

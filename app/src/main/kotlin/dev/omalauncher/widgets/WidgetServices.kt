@@ -152,6 +152,8 @@ class WidgetServices(
             "alarm" -> alarm.value()
             "modes" -> modes.value()
             "apps" -> apps()
+            "sessions" -> sessionSummary()
+            "tailscale" -> tailscaleSummary()
             else -> throw WidgetError("unknown android source $name")
         }
 
@@ -182,6 +184,31 @@ class WidgetServices(
         }
 
     override fun androidImage(src: String) = media.art(src)
+
+    private fun sessionSummary(): Value {
+        val manager = runtime.sessions
+        val items = manager.sessions.sortedByDescending { it.lastUsed }.take(3).map { session ->
+            Obj(mapOf("id" to Str(session.id), "name" to Str(session.name),
+                "machine" to Str(manager.machine(session.machineId)?.name.orEmpty()), "status" to Str(manager.label(session))))
+        }
+        return Obj(mapOf("count" to Num(manager.sessions.size.toDouble()), "items" to Lst(items)))
+    }
+
+    /** Cached control-plane data only; tokens never enter OWL or the Linux environment. */
+    private fun tailscaleSummary(): Value {
+        val manager = runtime.sessions
+        scope.launch { manager.discoverIfStale() }
+        return Obj(mapOf(
+            "configured" to bool(manager.discoveryConfigured),
+            "syncing" to bool(manager.discovering),
+            "error" to (manager.discoveryError?.let(::Str) ?: Null),
+            "updatedAt" to Num(manager.discoveryUpdatedAt / 1000.0),
+            "items" to Lst(manager.discoveredMachines.sortedBy { it.name.lowercase() }.map { machine ->
+                Obj(mapOf("id" to Str(machine.id), "name" to Str(machine.name),
+                    "host" to Str(machine.host), "lastSeen" to Str(machine.lastSeen)))
+            }),
+        ))
+    }
 
     /** "work" or "clone" for an app in a profile beside the launcher's own, as the drawer marks it; null for its own. */
     private fun profileKind(user: UserHandle): String? {
@@ -377,6 +404,11 @@ class WidgetServices(
                     Toast.makeText(context, "no app opens $arg", Toast.LENGTH_SHORT).show()
                 }
             "launcher" -> launcherAction?.invoke(arg)
+            "sshAuth" -> try {
+                runtime.sessions.authenticate(arg, args.getOrNull(1)?.toString().orEmpty())
+            } catch (_: IllegalArgumentException) {
+                Toast.makeText(context, "Choose a valid SSH host and username in the widget settings", Toast.LENGTH_LONG).show()
+            }
             "media" -> media.control(arg)
             "volume" -> volume.control(args[0])
             "notification" -> args.getOrNull(1)?.takeIf { it != Null }?.let { notifications.control(arg, it.toString()) }

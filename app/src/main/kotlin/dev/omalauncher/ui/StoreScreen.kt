@@ -229,6 +229,11 @@ private fun StoreList(
                 // Newest first; a stable sort, so a day's widgets keep the catalog's order.
                 .let { l -> if (filter.tab == NEW) l.sortedByDescending { it.added } else l }
         val updates = installed.count { market.hasUpdate(it) }
+        val sessionsAdded = engine.hasTailscaleSessionsWidget()
+        val showSessions = !apps &&
+            (filter.tab == ALL || filter.tab == "dev" || (filter.tab == INSTALLED && sessionsAdded)) &&
+            (q.isEmpty() || q in "tailscale ssh sessions tmux terminals previews tap to resume")
+        val showOtherBuiltIns = !apps && filter.tab == ALL && q.isEmpty()
 
         SearchField(filter.query, { filter.query = it }, onGo = { keyboard?.hide() }, placeholder = "search ${market.entries.size} $noun")
         Spacer(Modifier.height(8.dp))
@@ -247,8 +252,25 @@ private fun StoreList(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (!apps && filter.tab == ALL && q.isEmpty()) {
+            if (showSessions || showOtherBuiltIns) {
                 item(key = "builtin", span = { GridItemSpan(maxLineSpan) }) { Caption("built in") }
+            }
+            if (showSessions) {
+                item(key = "tailscale-ssh-sessions") {
+                    BuiltInEntry(
+                        "Tailscale SSH sessions",
+                        "6x4 · tmux previews, tap to resume",
+                        added = sessionsAdded,
+                        page = page,
+                    ) {
+                        scope.launch {
+                            engine.addTailscaleSessionsWidget(page)
+                            onDismiss()
+                        }
+                    }
+                }
+            }
+            if (showOtherBuiltIns) {
                 item(key = "terminal") {
                     BuiltInEntry("terminal", "6x4 · a shell", added = false, page = page) {
                         scope.launch {
@@ -279,7 +301,7 @@ private fun StoreList(
                         market.error != null && market.entries.isEmpty() -> BasicText(market.error.orEmpty(), style = Mono.copy(color = Palette.red))
                         market.entries.isEmpty() -> BasicText("no $noun yet", style = Mono.copy(color = Palette.muted))
                         shown.isEmpty() && q.isEmpty() && filter.tab == NEW -> BasicText("no new $noun", style = Mono.copy(color = Palette.muted))
-                        shown.isEmpty() -> BasicText("nothing matches \"${filter.query.trim()}\"", style = Mono.copy(color = Palette.muted))
+                        shown.isEmpty() && !showSessions -> BasicText("nothing matches \"${filter.query.trim()}\"", style = Mono.copy(color = Palette.muted))
                     }
                 }
             }

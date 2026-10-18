@@ -12,6 +12,7 @@ import unittest
 HELPER = Path(__file__).resolve().parents[1] / "app/src/main/assets/widgets/examples/oma-ssh-sessions"
 BASH = shutil.which("bash")
 TMUX = shutil.which("tmux")
+REMOTE_PATH = 'export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; '
 
 class SessionsTest(unittest.TestCase):
     def setUp(self):
@@ -27,11 +28,11 @@ if os.environ.get('CAPTURE_SSH'):
 if os.environ.get('FAIL_SSH'):
     sys.exit(255)
 remote = sys.argv[-1]
-assert remote.startswith(('python3 - ', 'exec tmux ')), sys.argv
+assert remote.startswith('export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; '), sys.argv
 sys.exit(subprocess.call(['/bin/bash', '-c', remote]))
 """)
         ssh.chmod(0o700)
-        self.env = {**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", "TMUX_TMPDIR": str(directory)}
+        self.env = {**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", "TMUX_TMPDIR": str(directory), "HOME": str(directory / "home"), "TMPDIR": str(directory)}
         self.env.pop("TMUX", None)
     def tearDown(self):
         subprocess.run([TMUX, "kill-server"], env=self.env, capture_output=True)
@@ -66,7 +67,7 @@ sys.exit(subprocess.call(['/bin/bash', '-c', remote]))
         self.assertEqual(0, result.returncode, result.stderr)
         args = json.loads(result.stdout)
         self.assertIn("-tt", args)
-        self.assertEqual(["--", "test-host", "exec tmux -u attach-session -t '$17'"], args[-3:])
+        self.assertEqual(["--", "test-host", REMOTE_PATH + "exec tmux -u attach-session -t '$17'"], args[-3:])
         self.assertNotIn("new-session", args[-1])
     def test_new_is_immediate_and_host_user_are_not_options_or_shell_code(self):
         host = "-oProxyCommand=echo bad; #"
@@ -75,7 +76,7 @@ sys.exit(subprocess.call(['/bin/bash', '-c', remote]))
         self.assertEqual(0, result.returncode, result.stderr)
         args = json.loads(result.stdout)
         self.assertEqual(user, args[args.index("-l") + 1])
-        self.assertEqual(["--", host, "exec tmux -u new-session"], args[-3:])
+        self.assertEqual(["--", host, REMOTE_PATH + "exec tmux -u new-session"], args[-3:])
     def test_invalid_attach_id_is_rejected_before_ssh(self):
         for action in ("attach", "end"):
             result = self.helper(action, "test-host", "test-user", "$1'; echo bad", capture=True)
@@ -95,10 +96,10 @@ sys.exit(subprocess.call(['/bin/bash', '-c', remote]))
         self.assertFalse(json.loads(result.stdout)["ok"])
         self.assertIn("Could not end", json.loads(result.stdout)["error"])
     def test_plain_ssh_has_no_tmux_or_python_requirement(self):
-        result = self.helper("shell", "other-node", "", capture=True)
+        result = self.helper("shell", "other-node", "test-user", capture=True)
         args = json.loads(result.stdout)
         self.assertEqual(["--", "other-node"], args[-2:])
-        self.assertNotIn("-l", args)
+        self.assertEqual("test-user", args[args.index("-l") + 1])
     def test_list_echoes_quoted_target_to_prevent_cross_machine_stale_actions(self):
         host = "node'; printf INJECTED; #"
         user = "user'; printf INJECTED; #"
